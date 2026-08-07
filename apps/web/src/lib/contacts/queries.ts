@@ -90,7 +90,13 @@ export async function listCustomFieldDefinitions(): Promise<CustomFieldDefinitio
     .select("id, key, label, field_type, options")
     .order("label");
   if (error) throw error;
-  return (data ?? []).map((d) => ({ id: d.id, key: d.key, label: d.label, fieldType: d.field_type, options: d.options }));
+  return (data ?? []).map((d) => ({
+    id: d.id,
+    key: d.key,
+    label: d.label,
+    fieldType: d.field_type as CustomFieldDefinition["fieldType"],
+    options: d.options,
+  }));
 }
 
 export interface TagItem {
@@ -132,7 +138,7 @@ export async function getContact(contactId: string): Promise<ContactDetail | nul
     displayName: contact.display_name,
     consentStatus: contact.consent_status,
     consentSource: contact.consent_source,
-    customFields: contact.custom_fields,
+    customFields: contact.custom_fields as unknown as Record<string, unknown>,
     tags: tags ?? [],
   };
 }

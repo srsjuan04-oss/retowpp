@@ -116,7 +116,7 @@ export async function listMessages(conversationId: string): Promise<MessageItem[
     direction: m.direction,
     senderType: m.sender_type,
     messageType: m.message_type,
-    content: m.content,
+    content: m.content as unknown as Record<string, unknown>,
     status: m.status,
     createdAt: m.created_at,
   }));

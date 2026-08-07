@@ -51,7 +51,12 @@ export async function previewAudience(filter: AudienceFilter): Promise<AudienceC
 
   return contacts
     .filter((c) => !excludedIds.has(c.id))
-    .map((c) => ({ id: c.id, waId: c.wa_id, displayName: c.display_name, customFields: c.custom_fields }));
+    .map((c) => ({
+      id: c.id,
+      waId: c.wa_id,
+      displayName: c.display_name,
+      customFields: c.custom_fields as unknown as Record<string, unknown>,
+    }));
 }
 
 export interface CampaignListItem {
@@ -99,12 +104,12 @@ export async function getCampaign(campaignId: string): Promise<CampaignDetail | 
     status: data.status,
     templateId: data.template_id,
     phoneNumberId: data.phone_number_id,
-    variableMapping: data.variable_mapping,
+    variableMapping: data.variable_mapping as unknown as Record<string, string>,
     audienceFilter: {
       includeTagIds: rawFilter.includeTagIds ?? [],
       excludeTagIds: rawFilter.excludeTagIds ?? [],
     },
-    stats: data.stats,
+    stats: data.stats as unknown as Record<string, unknown>,
   };
 }
 

@@ -43,7 +43,7 @@ export async function listAuditLog(filters: AuditLogFilters = {}): Promise<Audit
     action: e.action,
     entityType: e.entity_type,
     entityId: e.entity_id,
-    metadata: e.metadata,
+    metadata: e.metadata as unknown as Record<string, unknown>,
     createdAt: e.created_at,
   }));
 }

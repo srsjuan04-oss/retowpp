@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import * as z from "zod";
 import { normalizeWaId } from "@reto-whatsapp/core";
-import type { ConsentStatus } from "@reto-whatsapp/db";
+import type { ConsentStatus, Json } from "@reto-whatsapp/db";
 import { requireRole, verifySession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 
@@ -218,7 +218,7 @@ export async function updateContactCustomField(
   };
   const { error } = await supabase
     .from("contacts")
-    .update({ custom_fields: nextCustomFields })
+    .update({ custom_fields: nextCustomFields as unknown as Json })
     .eq("id", parsed.data.contactId);
   if (error) return { error: error.message };
 
