@@ -1,0 +1,24 @@
+{
+  "name": "reto-whatsapp",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "bun --cwd apps/web run dev",
+    "dev:worker": "bun --cwd apps/worker run dev",
+    "build:web": "bun --cwd apps/web run build",
+    "build:worker": "bun --cwd apps/worker run build",
+    "lint": "bun --cwd apps/web run lint",
+    "typecheck": "bun --cwd apps/web run typecheck && bun --cwd apps/worker run typecheck && bun --cwd packages/core run typecheck",
+    "test": "bun test",
+    "db:migrate": "supabase db push",
+    "db:types": "supabase gen types typescript --local > packages/db/src/types.generated.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "bun@1.3.13"
+}

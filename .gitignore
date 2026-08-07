@@ -1,0 +1,19 @@
+node_modules/
+.next/
+dist/
+build/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+bun.lockb
+.turbo/
+.DS_Store
+coverage/
+supabase/.branches/
+supabase/.temp/
+*.log
+.vercel/
+
+# Config local de Claude Code (permisos/ajustes de esta máquina, no de equipo)
+.claude/settings.local.json

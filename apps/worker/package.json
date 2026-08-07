@@ -1,0 +1,25 @@
+{
+  "name": "@reto-whatsapp/worker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "bun run dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
+    "@reto-whatsapp/core": "workspace:*",
+    "@reto-whatsapp/db": "workspace:*",
+    "@supabase/supabase-js": "^2.110.9",
+    "bullmq": "^5.81.2",
+    "csv-parse": "^5.6.0",
+    "ioredis": "^5.11.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5.7.2"
+  }
+}
