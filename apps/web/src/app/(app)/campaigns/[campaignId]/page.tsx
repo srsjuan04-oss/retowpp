@@ -15,6 +15,17 @@ const STATUS_BADGE_VARIANTS: Record<string, BadgeProps["variant"]> = {
   cancelled: "neutral",
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Borrador",
+  recipients_locked: "Destinatarios confirmados",
+  queued: "En cola",
+  running: "Enviando",
+  paused: "Pausada",
+  completed: "Completada",
+  failed: "Fallida",
+  cancelled: "Cancelada",
+};
+
 const RECIPIENT_STATUS_BADGE_VARIANTS: Record<string, BadgeProps["variant"]> = {
   pending: "neutral",
   queued: "warning",
@@ -23,6 +34,16 @@ const RECIPIENT_STATUS_BADGE_VARIANTS: Record<string, BadgeProps["variant"]> = {
   read: "success",
   failed: "destructive",
   skipped: "neutral",
+};
+
+const RECIPIENT_STATUS_LABELS: Record<string, string> = {
+  pending: "Pendiente",
+  queued: "En cola",
+  sent: "Enviado",
+  delivered: "Entregado",
+  read: "Leído",
+  failed: "Fallido",
+  skipped: "Omitido",
 };
 
 export default async function CampaignDetailPage({
@@ -46,7 +67,9 @@ export default async function CampaignDetailPage({
     <div className="flex flex-1 flex-col gap-6 p-8">
       <header className="flex items-center gap-3">
         <h1 className="text-xl font-semibold">{campaign.name}</h1>
-        <Badge variant={STATUS_BADGE_VARIANTS[campaign.status] ?? "neutral"}>{campaign.status}</Badge>
+        <Badge variant={STATUS_BADGE_VARIANTS[campaign.status] ?? "neutral"}>
+          {STATUS_LABELS[campaign.status] ?? campaign.status}
+        </Badge>
       </header>
 
       {campaign.status === "draft" && (
@@ -114,7 +137,9 @@ export default async function CampaignDetailPage({
                   <tr key={r.id} className="border-t">
                     <td className="px-3 py-2 font-medium">{r.phoneNumberSnapshot}</td>
                     <td className="px-3 py-2">
-                      <Badge variant={RECIPIENT_STATUS_BADGE_VARIANTS[r.status] ?? "neutral"}>{r.status}</Badge>
+                      <Badge variant={RECIPIENT_STATUS_BADGE_VARIANTS[r.status] ?? "neutral"}>
+                        {RECIPIENT_STATUS_LABELS[r.status] ?? r.status}
+                      </Badge>
                     </td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {r.status === "failed" && (r.error?.message ?? "Sin detalle del error.")}

@@ -14,6 +14,17 @@ const STATUS_BADGE_VARIANTS: Record<string, BadgeProps["variant"]> = {
   cancelled: "neutral",
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  draft: "Borrador",
+  recipients_locked: "Destinatarios confirmados",
+  queued: "En cola",
+  running: "Enviando",
+  paused: "Pausada",
+  completed: "Completada",
+  failed: "Fallida",
+  cancelled: "Cancelada",
+};
+
 export default async function CampaignsPage() {
   await requireRole("admin", "supervisor");
   const campaigns = await listCampaigns();
@@ -45,7 +56,9 @@ export default async function CampaignsPage() {
                   </Link>
                 </td>
                 <td className="px-3 py-2">
-                  <Badge variant={STATUS_BADGE_VARIANTS[c.status] ?? "neutral"}>{c.status}</Badge>
+                  <Badge variant={STATUS_BADGE_VARIANTS[c.status] ?? "neutral"}>
+                    {STATUS_LABELS[c.status] ?? c.status}
+                  </Badge>
                 </td>
                 <td className="px-3 py-2 text-muted-foreground">{new Date(c.createdAt).toLocaleString()}</td>
               </tr>
