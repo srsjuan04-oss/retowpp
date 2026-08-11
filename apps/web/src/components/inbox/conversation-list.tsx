@@ -28,9 +28,17 @@ export function ConversationList({ initialConversations }: { initialConversation
     const supabase = createClient();
     const channel = supabase
       .channel("inbox-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => router.refresh())
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, () => router.refresh())
-      .subscribe();
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, (payload) => {
+        console.log("[inbox-realtime] conversations change", payload);
+        router.refresh();
+      })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+        console.log("[inbox-realtime] messages insert", payload);
+        router.refresh();
+      })
+      .subscribe((status, err) => {
+        console.log("[inbox-realtime] subscribe status", status, err);
+      });
 
     return () => {
       void supabase.removeChannel(channel);
