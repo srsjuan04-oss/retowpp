@@ -392,6 +392,7 @@ export type Database = {
           id: string
           last_inbound_at: string | null
           last_outbound_at: string | null
+          last_read_at: string | null
           phone_number_id: string
           status: Database["public"]["Enums"]["conversation_status"]
           updated_at: string
@@ -404,6 +405,7 @@ export type Database = {
           id?: string
           last_inbound_at?: string | null
           last_outbound_at?: string | null
+          last_read_at?: string | null
           phone_number_id: string
           status?: Database["public"]["Enums"]["conversation_status"]
           updated_at?: string
@@ -416,6 +418,7 @@ export type Database = {
           id?: string
           last_inbound_at?: string | null
           last_outbound_at?: string | null
+          last_read_at?: string | null
           phone_number_id?: string
           status?: Database["public"]["Enums"]["conversation_status"]
           updated_at?: string

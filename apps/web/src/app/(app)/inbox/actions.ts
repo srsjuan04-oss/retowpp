@@ -225,3 +225,15 @@ export async function closeConversation(conversationId: string): Promise<void> {
   revalidatePath("/inbox");
   revalidatePath(`/inbox/${conversationId}`);
 }
+
+/** Marca como leído al abrir el hilo (módulo bandeja): sin lectura por-agente, un timestamp global alcanza. */
+export async function markConversationRead(conversationId: string): Promise<void> {
+  await verifySession();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("conversations")
+    .update({ last_read_at: new Date().toISOString() })
+    .eq("id", conversationId);
+  if (error) throw error;
+  revalidatePath("/inbox");
+}

@@ -1,8 +1,14 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { isWithinServiceWindow } from "@reto-whatsapp/core";
-import { assignConversation, closeConversation, sendMessage, type SendMessageState } from "@/app/(app)/inbox/actions";
+import {
+  assignConversation,
+  closeConversation,
+  markConversationRead,
+  sendMessage,
+  type SendMessageState,
+} from "@/app/(app)/inbox/actions";
 import { Button } from "@/components/ui/button";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -38,6 +44,10 @@ export function ConversationThread({
 }) {
   const [state, formAction, pending] = useActionState(sendMessage, initialState);
   const withinWindow = isWithinServiceWindow(conversation.lastInboundAt);
+
+  useEffect(() => {
+    void markConversationRead(conversation.id);
+  }, [conversation.id]);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">

@@ -48,7 +48,14 @@ export function ConversationList({ initialConversations }: { initialConversation
               params.conversationId === conversation.id && "bg-accent",
             )}
           >
-            <span className="font-medium">{conversation.contact.displayName ?? conversation.contact.waId}</span>
+            <span className="flex items-center gap-1.5">
+              {conversation.isUnread && (
+                <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="No leído" />
+              )}
+              <span className={cn("font-medium", conversation.isUnread && "font-semibold")}>
+                {conversation.contact.displayName ?? conversation.contact.waId}
+              </span>
+            </span>
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Badge variant={CONVERSATION_STATUS_BADGE_VARIANTS[conversation.status] ?? "neutral"}>
                 {conversation.status}

@@ -16,7 +16,15 @@ export interface ConversationListItem {
   assignedTeamId: string | null;
   lastInboundAt: string | null;
   lastOutboundAt: string | null;
+  isUnread: boolean;
   contact: { id: string; displayName: string | null; waId: string };
+}
+
+/** Sin lectura por-agente: un solo `last_read_at` por conversación alcanza para el caso de uso actual. */
+function computeIsUnread(lastInboundAt: string | null, lastReadAt: string | null): boolean {
+  if (!lastInboundAt) return false;
+  if (!lastReadAt) return true;
+  return new Date(lastInboundAt).getTime() > new Date(lastReadAt).getTime();
 }
 
 /**
@@ -29,7 +37,7 @@ export async function listConversations(): Promise<ConversationListItem[]> {
 
   const { data: conversations, error } = await supabase
     .from("conversations")
-    .select("id, status, assigned_to, assigned_team_id, last_inbound_at, last_outbound_at, contact_id")
+    .select("id, status, assigned_to, assigned_team_id, last_inbound_at, last_outbound_at, last_read_at, contact_id")
     .order("last_inbound_at", { ascending: false, nullsFirst: false });
   if (error) throw error;
   if (!conversations || conversations.length === 0) return [];
@@ -49,6 +57,7 @@ export async function listConversations(): Promise<ConversationListItem[]> {
     assignedTeamId: c.assigned_team_id,
     lastInboundAt: c.last_inbound_at,
     lastOutboundAt: c.last_outbound_at,
+    isUnread: computeIsUnread(c.last_inbound_at, c.last_read_at),
     contact: {
       id: c.contact_id,
       displayName: contactById.get(c.contact_id)?.display_name ?? null,
@@ -67,7 +76,9 @@ export async function getConversation(conversationId: string): Promise<Conversat
 
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("id, status, assigned_to, assigned_team_id, last_inbound_at, last_outbound_at, contact_id, phone_number_id")
+    .select(
+      "id, status, assigned_to, assigned_team_id, last_inbound_at, last_outbound_at, last_read_at, contact_id, phone_number_id",
+    )
     .eq("id", conversationId)
     .maybeSingle();
   if (!conversation) return null;
@@ -86,6 +97,7 @@ export async function getConversation(conversationId: string): Promise<Conversat
     assignedTeamId: conversation.assigned_team_id,
     lastInboundAt: conversation.last_inbound_at,
     lastOutboundAt: conversation.last_outbound_at,
+    isUnread: computeIsUnread(conversation.last_inbound_at, conversation.last_read_at),
     phoneNumberRowId: conversation.phone_number_id,
     contactConsentStatus: contact.consent_status,
     contact: { id: contact.id, displayName: contact.display_name, waId: contact.wa_id },
