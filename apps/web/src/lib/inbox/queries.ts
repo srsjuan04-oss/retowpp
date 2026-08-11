@@ -17,6 +17,8 @@ export interface ConversationListItem {
   lastInboundAt: string | null;
   lastOutboundAt: string | null;
   isUnread: boolean;
+  /** Solo se llena en `listConversations`; el hilo de detalle ya muestra todos los mensajes, no la necesita. */
+  lastMessagePreview?: string | null;
   contact: { id: string; displayName: string | null; waId: string };
 }
 
@@ -25,6 +27,18 @@ function computeIsUnread(lastInboundAt: string | null, lastReadAt: string | null
   if (!lastInboundAt) return false;
   if (!lastReadAt) return true;
   return new Date(lastInboundAt).getTime() > new Date(lastReadAt).getTime();
+}
+
+const PREVIEW_MAX_LENGTH = 60;
+
+function derivePreview(messageType: string, content: Record<string, unknown> | null): string {
+  if (messageType === "text" && typeof content?.body === "string") {
+    const body = content.body.trim();
+    return body.length > PREVIEW_MAX_LENGTH ? `${body.slice(0, PREVIEW_MAX_LENGTH)}…` : body;
+  }
+  if (messageType === "template") return "Plantilla enviada";
+  if (messageType === "unknown") return "Mensaje no compatible";
+  return `[${messageType}]`;
 }
 
 /**
@@ -50,20 +64,41 @@ export async function listConversations(): Promise<ConversationListItem[]> {
   if (contactsError) throw contactsError;
   const contactById = new Map((contacts ?? []).map((c) => [c.id, c]));
 
-  return conversations.map((c) => ({
-    id: c.id,
-    status: c.status,
-    assignedTo: c.assigned_to,
-    assignedTeamId: c.assigned_team_id,
-    lastInboundAt: c.last_inbound_at,
-    lastOutboundAt: c.last_outbound_at,
-    isUnread: computeIsUnread(c.last_inbound_at, c.last_read_at),
-    contact: {
-      id: c.contact_id,
-      displayName: contactById.get(c.contact_id)?.display_name ?? null,
-      waId: contactById.get(c.contact_id)?.wa_id ?? "",
-    },
-  }));
+  const conversationIds = conversations.map((c) => c.id);
+  const { data: recentMessages, error: messagesError } = await supabase
+    .from("messages")
+    .select("conversation_id, message_type, content, created_at")
+    .in("conversation_id", conversationIds)
+    .order("created_at", { ascending: false });
+  if (messagesError) throw messagesError;
+  // Primera coincidencia por conversation_id = la más reciente, gracias al order desc de arriba.
+  const lastMessageByConversation = new Map<string, { message_type: string; content: unknown }>();
+  for (const m of recentMessages ?? []) {
+    if (!lastMessageByConversation.has(m.conversation_id)) {
+      lastMessageByConversation.set(m.conversation_id, m);
+    }
+  }
+
+  return conversations.map((c) => {
+    const lastMessage = lastMessageByConversation.get(c.id);
+    return {
+      id: c.id,
+      status: c.status,
+      assignedTo: c.assigned_to,
+      assignedTeamId: c.assigned_team_id,
+      lastInboundAt: c.last_inbound_at,
+      lastOutboundAt: c.last_outbound_at,
+      isUnread: computeIsUnread(c.last_inbound_at, c.last_read_at),
+      lastMessagePreview: lastMessage
+        ? derivePreview(lastMessage.message_type, lastMessage.content as Record<string, unknown>)
+        : null,
+      contact: {
+        id: c.contact_id,
+        displayName: contactById.get(c.contact_id)?.display_name ?? null,
+        waId: contactById.get(c.contact_id)?.wa_id ?? "",
+      },
+    };
+  });
 }
 
 export interface ConversationDetail extends ConversationListItem {

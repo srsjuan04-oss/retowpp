@@ -50,12 +50,22 @@ export function ConversationList({ initialConversations }: { initialConversation
           >
             <span className="flex items-center gap-1.5">
               {conversation.isUnread && (
-                <span className="h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="No leído" />
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" aria-label="No leído" />
               )}
-              <span className={cn("font-medium", conversation.isUnread && "font-semibold")}>
+              <span className={cn("font-medium", conversation.isUnread && "font-semibold text-foreground")}>
                 {conversation.contact.displayName ?? conversation.contact.waId}
               </span>
             </span>
+            {conversation.lastMessagePreview && (
+              <span
+                className={cn(
+                  "truncate text-xs",
+                  conversation.isUnread ? "font-medium text-foreground/80" : "text-muted-foreground",
+                )}
+              >
+                {conversation.lastMessagePreview}
+              </span>
+            )}
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Badge variant={CONVERSATION_STATUS_BADGE_VARIANTS[conversation.status] ?? "neutral"}>
                 {conversation.status}
