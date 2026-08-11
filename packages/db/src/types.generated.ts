@@ -687,6 +687,115 @@ export type Database = {
           },
         ]
       }
+      hotmart_webhook_events: {
+        Row: {
+          event: string
+          hotmart_webhook_id: string | null
+          id: string
+          message_id: string | null
+          payload: Json
+          processed_at: string | null
+          processing_error: string | null
+          received_at: string
+        }
+        Insert: {
+          event: string
+          hotmart_webhook_id?: string | null
+          id?: string
+          message_id?: string | null
+          payload: Json
+          processed_at?: string | null
+          processing_error?: string | null
+          received_at?: string
+        }
+        Update: {
+          event?: string
+          hotmart_webhook_id?: string | null
+          id?: string
+          message_id?: string | null
+          payload?: Json
+          processed_at?: string | null
+          processing_error?: string | null
+          received_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hotmart_webhook_events_hotmart_webhook_id_fkey"
+            columns: ["hotmart_webhook_id"]
+            isOneToOne: false
+            referencedRelation: "hotmart_webhooks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hotmart_webhook_events_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      hotmart_webhooks: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          event: Database["public"]["Enums"]["hotmart_event"]
+          id: string
+          is_active: boolean
+          name: string
+          phone_number_id: string
+          template_id: string
+          updated_at: string
+          variable_mapping: Json
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          event: Database["public"]["Enums"]["hotmart_event"]
+          id?: string
+          is_active?: boolean
+          name: string
+          phone_number_id: string
+          template_id: string
+          updated_at?: string
+          variable_mapping?: Json
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          event?: Database["public"]["Enums"]["hotmart_event"]
+          id?: string
+          is_active?: boolean
+          name?: string
+          phone_number_id?: string
+          template_id?: string
+          updated_at?: string
+          variable_mapping?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "hotmart_webhooks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hotmart_webhooks_phone_number_id_fkey"
+            columns: ["phone_number_id"]
+            isOneToOne: false
+            referencedRelation: "phone_numbers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "hotmart_webhooks_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       mcp_servers: {
         Row: {
           authorization_token_encrypted: string | null
@@ -1147,6 +1256,10 @@ export type Database = {
       flow_branch_match_type: "any" | "equals" | "contains"
       flow_run_status: "active" | "completed"
       flow_step_content_type: "text" | "image" | "audio"
+      hotmart_event:
+        | "PURCHASE_APPROVED"
+        | "PURCHASE_CANCELED"
+        | "PURCHASE_OUT_OF_SHOPPING_CART"
       message_direction: "inbound" | "outbound"
       message_sender_type:
         | "contact"
@@ -1154,6 +1267,7 @@ export type Database = {
         | "system"
         | "campaign"
         | "ai_agent"
+        | "hotmart"
       message_status: "queued" | "sent" | "delivered" | "read" | "failed"
       message_type:
         | "text"
@@ -1325,6 +1439,11 @@ export const Constants = {
       flow_branch_match_type: ["any", "equals", "contains"],
       flow_run_status: ["active", "completed"],
       flow_step_content_type: ["text", "image", "audio"],
+      hotmart_event: [
+        "PURCHASE_APPROVED",
+        "PURCHASE_CANCELED",
+        "PURCHASE_OUT_OF_SHOPPING_CART",
+      ],
       message_direction: ["inbound", "outbound"],
       message_sender_type: [
         "contact",
@@ -1332,6 +1451,7 @@ export const Constants = {
         "system",
         "campaign",
         "ai_agent",
+        "hotmart",
       ],
       message_status: ["queued", "sent", "delivered", "read", "failed"],
       message_type: [
@@ -1374,3 +1494,4 @@ export type CampaignRecipientStatus = Database["public"]["Enums"]["campaign_reci
 export type FlowStepContentType = Database["public"]["Enums"]["flow_step_content_type"];
 export type FlowBranchMatchType = Database["public"]["Enums"]["flow_branch_match_type"];
 export type FlowRunStatus = Database["public"]["Enums"]["flow_run_status"];
+export type HotmartEvent = Database["public"]["Enums"]["hotmart_event"];

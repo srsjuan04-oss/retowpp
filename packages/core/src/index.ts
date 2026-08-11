@@ -8,5 +8,6 @@ export * from "./domain/templates";
 export * from "./domain/message-status";
 export * from "./domain/phone";
 export * from "./domain/campaign-variables";
+export * from "./domain/hotmart";
 export * from "./queues/names";
 export * from "./security/token-crypto";

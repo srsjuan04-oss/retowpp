@@ -6,6 +6,7 @@ import { createTemplateSyncWorker, scheduleRecurringTemplateSync } from "./proce
 import { createCampaignDispatchWorker } from "./processors/campaign-dispatch";
 import { createMessageSendWorker } from "./processors/message-send";
 import { createAiAgentReplyWorker } from "./processors/ai-agent-reply";
+import { createHotmartWebhookWorker } from "./processors/hotmart-webhook";
 import { startWebhookEventsSweeper } from "./sweeper";
 
 async function main() {
@@ -20,6 +21,7 @@ async function main() {
   const { worker: campaignDispatchWorker, messageSendQueue } = createCampaignDispatchWorker(connection);
   const messageSendWorker = createMessageSendWorker(connection);
   const aiAgentReplyWorker = createAiAgentReplyWorker(connection);
+  const hotmartWebhookWorker = createHotmartWebhookWorker(connection);
   const stopSweeper = startWebhookEventsSweeper(supabase, aiAgentReplyQueue);
 
   webhookProcessingWorker.on("failed", (job, err) => {
@@ -37,9 +39,12 @@ async function main() {
   aiAgentReplyWorker.on("failed", (job, err) => {
     console.error(`[worker] job ${job?.id} de ai-agent-reply falló`, err);
   });
+  hotmartWebhookWorker.on("failed", (job, err) => {
+    console.error(`[worker] job ${job?.id} de hotmart-webhook falló`, err);
+  });
 
   console.log(
-    "[worker] listo: webhook-processing, contact-import, template-sync, campaign-dispatch, message-send, ai-agent-reply y barrido de eventos pendientes",
+    "[worker] listo: webhook-processing, contact-import, template-sync, campaign-dispatch, message-send, ai-agent-reply, hotmart-webhook y barrido de eventos pendientes",
   );
 
   const shutdown = async () => {
@@ -55,6 +60,7 @@ async function main() {
       messageSendQueue.close(),
       messageSendWorker.close(),
       aiAgentReplyWorker.close(),
+      hotmartWebhookWorker.close(),
     ]);
     await connection.quit();
     process.exit(0);
