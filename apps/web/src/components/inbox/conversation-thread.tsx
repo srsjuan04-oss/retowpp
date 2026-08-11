@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { isWithinServiceWindow } from "@reto-whatsapp/core";
 import {
   assignConversation,
@@ -44,10 +44,15 @@ export function ConversationThread({
 }) {
   const [state, formAction, pending] = useActionState(sendMessage, initialState);
   const withinWindow = isWithinServiceWindow(conversation.lastInboundAt);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     void markConversationRead(conversation.id);
   }, [conversation.id]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ block: "end" });
+  }, [conversation.id, initialMessages.length]);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -98,6 +103,7 @@ export function ConversationThread({
           </div>
         ))}
         {initialMessages.length === 0 && <p className="text-sm text-muted-foreground">Sin mensajes todavía.</p>}
+        <div ref={bottomRef} />
       </div>
 
       <div className="flex flex-col gap-3 border-t p-4">
