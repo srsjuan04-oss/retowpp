@@ -7,3 +7,4 @@ export const TEMPLATE_SYNC_QUEUE = "template-sync";
 export const CONTACT_IMPORT_QUEUE = "contact-import";
 export const AI_AGENT_REPLY_QUEUE = "ai-agent-reply";
 export const HOTMART_WEBHOOK_QUEUE = "hotmart-webhook";
+export const FLOW_ENGINE_QUEUE = "flow-engine";

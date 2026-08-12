@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import type {
   MetaTemplateApiItem,
+  SendMediaMessageInput,
   SendTemplateMessageInput,
   SendTextMessageInput,
   WhatsAppSendResponse,
@@ -88,6 +89,16 @@ export class WhatsAppClient {
       type: "text",
       text: { body: input.body, preview_url: input.previewUrl ?? false },
       ...(input.contextMessageId ? { context: { message_id: input.contextMessageId } } : {}),
+    });
+  }
+
+  /** Envío de imagen/audio por link (URL pública o firmada): sin subida previa a /media. */
+  async sendMediaMessage(input: SendMediaMessageInput): Promise<WhatsAppSendResponse> {
+    return this.post(`/${this.requirePhoneNumberId()}/messages`, {
+      messaging_product: "whatsapp",
+      to: input.to,
+      type: input.type,
+      [input.type]: { link: input.link },
     });
   }
 

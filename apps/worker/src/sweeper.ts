@@ -13,15 +13,19 @@ const SWEEP_INTERVAL_MS = 60_000;
  * en vez de reencolarlas (evita reconciliar estados de jobs de BullMQ ya
  * fallidos/expirados). `processWebhookEvent` ya es idempotente por sí mismo.
  */
-export function startWebhookEventsSweeper(supabase: SupabaseClient<Database>, aiAgentReplyQueue: Queue): () => void {
+export function startWebhookEventsSweeper(
+  supabase: SupabaseClient<Database>,
+  aiAgentReplyQueue: Queue,
+  flowEngineQueue: Queue,
+): () => void {
   const timer = setInterval(() => {
-    void sweepOnce(supabase, aiAgentReplyQueue);
+    void sweepOnce(supabase, aiAgentReplyQueue, flowEngineQueue);
   }, SWEEP_INTERVAL_MS);
 
   return () => clearInterval(timer);
 }
 
-async function sweepOnce(supabase: SupabaseClient<Database>, aiAgentReplyQueue: Queue): Promise<void> {
+async function sweepOnce(supabase: SupabaseClient<Database>, aiAgentReplyQueue: Queue, flowEngineQueue: Queue): Promise<void> {
   const staleBefore = new Date(Date.now() - STALE_THRESHOLD_MINUTES * 60_000).toISOString();
   const { data: staleEvents, error } = await supabase
     .from("webhook_events")
@@ -37,7 +41,7 @@ async function sweepOnce(supabase: SupabaseClient<Database>, aiAgentReplyQueue: 
 
   for (const { id } of staleEvents ?? []) {
     try {
-      await processWebhookEvent(supabase, id, aiAgentReplyQueue);
+      await processWebhookEvent(supabase, id, aiAgentReplyQueue, flowEngineQueue);
     } catch (processingError) {
       console.error(`[sweeper] error reprocesando webhook_event ${id}`, processingError);
     }

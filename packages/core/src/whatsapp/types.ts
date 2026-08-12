@@ -20,6 +20,13 @@ export interface SendTextMessageInput {
   contextMessageId?: string;
 }
 
+export interface SendMediaMessageInput {
+  to: string;
+  type: "image" | "audio";
+  /** URL pública o firmada desde donde Meta descarga el archivo (no requiere subida previa a /media). */
+  link: string;
+}
+
 export interface WhatsAppSendResponse {
   messaging_product: "whatsapp";
   contacts: Array<{ input: string; wa_id: string }>;

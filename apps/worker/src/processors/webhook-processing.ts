@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { Queue, Worker, type Job, type ConnectionOptions } from "bullmq";
 import {
   AI_AGENT_REPLY_QUEUE,
+  FLOW_ENGINE_QUEUE,
   buildMessageStatusDedupeKey,
   isForwardStatusTransition,
   WEBHOOK_PROCESSING_QUEUE,
@@ -63,6 +64,7 @@ async function processInboundMessages(
   supabase: Client,
   value: NonNullable<WhatsAppWebhookPayload["entry"][number]["changes"][number]["value"]>,
   aiAgentReplyQueue: Queue,
+  flowEngineQueue: Queue,
 ) {
   const metaPhoneNumberId = value.metadata.phone_number_id;
   const phoneNumberRowId = await findPhoneNumberRowId(supabase, metaPhoneNumberId);
@@ -95,13 +97,18 @@ async function processInboundMessages(
       .select("id");
     if (messageError) throw messageError;
 
-    // Solo se dispara el agente de IA ante un inbound nuevo de verdad (no en un
-    // reintento del mismo webhook, que con ignoreDuplicates no inserta nada).
+    // Solo se dispara el agente de IA / motor de flujos ante un inbound nuevo de
+    // verdad (no en un reintento del mismo webhook, que con ignoreDuplicates no inserta nada).
     if (insertedMessage && insertedMessage.length > 0 && messageType === "text") {
       await aiAgentReplyQueue.add(
         "reply",
         { conversationId },
         { jobId: `ai-agent-reply|${raw.id}`, attempts: 2, backoff: { type: "exponential", delay: 5000 } },
+      );
+      await flowEngineQueue.add(
+        "advance",
+        { conversationId },
+        { jobId: `flow-engine|${raw.id}`, attempts: 3, backoff: { type: "exponential", delay: 5000 } },
       );
     }
 
@@ -160,7 +167,12 @@ async function processStatusEvents(
   }
 }
 
-export async function processWebhookEvent(supabase: Client, webhookEventId: string, aiAgentReplyQueue: Queue): Promise<void> {
+export async function processWebhookEvent(
+  supabase: Client,
+  webhookEventId: string,
+  aiAgentReplyQueue: Queue,
+  flowEngineQueue: Queue,
+): Promise<void> {
   const { data: event, error } = await supabase
     .from("webhook_events")
     .select("id, payload, processed_at, retry_count")
@@ -173,7 +185,7 @@ export async function processWebhookEvent(supabase: Client, webhookEventId: stri
     const payload = event.payload as unknown as WhatsAppWebhookPayload;
     for (const entry of payload.entry ?? []) {
       for (const change of entry.changes ?? []) {
-        await processInboundMessages(supabase, change.value, aiAgentReplyQueue);
+        await processInboundMessages(supabase, change.value, aiAgentReplyQueue, flowEngineQueue);
         await processStatusEvents(supabase, change.value);
       }
     }
@@ -191,17 +203,20 @@ export async function processWebhookEvent(supabase: Client, webhookEventId: stri
   }
 }
 
-export function createWebhookProcessingWorker(connection: ConnectionOptions): { worker: Worker; aiAgentReplyQueue: Queue } {
+export function createWebhookProcessingWorker(
+  connection: ConnectionOptions,
+): { worker: Worker; aiAgentReplyQueue: Queue; flowEngineQueue: Queue } {
   const supabase = createWorkerSupabaseClient();
   const aiAgentReplyQueue = new Queue(AI_AGENT_REPLY_QUEUE, { connection });
+  const flowEngineQueue = new Queue(FLOW_ENGINE_QUEUE, { connection });
 
   const worker = new Worker(
     WEBHOOK_PROCESSING_QUEUE,
     async (job: Job<{ webhookEventId: string }>) => {
-      await processWebhookEvent(supabase, job.data.webhookEventId, aiAgentReplyQueue);
+      await processWebhookEvent(supabase, job.data.webhookEventId, aiAgentReplyQueue, flowEngineQueue);
     },
     { connection },
   );
 
-  return { worker, aiAgentReplyQueue };
+  return { worker, aiAgentReplyQueue, flowEngineQueue };
 }
