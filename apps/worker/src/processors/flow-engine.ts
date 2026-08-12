@@ -136,10 +136,16 @@ async function maybeStartRun(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!lastOutboundTemplate) return;
+  if (!lastOutboundTemplate) {
+    console.log("[flow-engine] sin plantilla saliente previa en esta conversación");
+    return;
+  }
 
   const templateName = (lastOutboundTemplate.content as { templateName?: string } | null)?.templateName;
-  if (!templateName) return;
+  if (!templateName) {
+    console.log("[flow-engine] la última plantilla saliente no tiene templateName en content");
+    return;
+  }
 
   const { data: phoneNumber, error: phoneError } = await supabase
     .from("phone_numbers")
@@ -154,7 +160,10 @@ async function maybeStartRun(
     .eq("name", templateName)
     .eq("waba_account_id", phoneNumber.waba_account_id)
     .maybeSingle();
-  if (!template) return;
+  if (!template) {
+    console.log(`[flow-engine] no se encontró template name=${templateName} waba=${phoneNumber.waba_account_id}`);
+    return;
+  }
 
   const { data: flow } = await supabase
     .from("flows")
@@ -162,7 +171,10 @@ async function maybeStartRun(
     .eq("template_id", template.id)
     .eq("is_active", true)
     .maybeSingle();
-  if (!flow) return;
+  if (!flow) {
+    console.log(`[flow-engine] no hay flujo activo para template_id=${template.id}`);
+    return;
+  }
 
   if (inboundWamid) {
     const { data: existingRun } = await supabase
@@ -170,7 +182,10 @@ async function maybeStartRun(
       .select("id")
       .eq("trigger_wamid", inboundWamid)
       .maybeSingle();
-    if (existingRun) return; // reintento del mismo webhook: ya se arrancó este run.
+    if (existingRun) {
+      console.log(`[flow-engine] ya existe un run para trigger_wamid=${inboundWamid}`);
+      return;
+    }
   }
 
   const { data: firstStep, error: stepError } = await supabase
@@ -180,7 +195,11 @@ async function maybeStartRun(
     .eq("step_order", 1)
     .maybeSingle();
   if (stepError) throw stepError;
-  if (!firstStep) return; // flujo activo sin pasos: no debería pasar (la UI exige al menos 1 para activar).
+  if (!firstStep) {
+    console.log(`[flow-engine] flujo ${flow.id} activo sin paso 1`);
+    return;
+  }
+  console.log(`[flow-engine] arrancando run: flow=${flow.id} step=${firstStep.id}`);
 
   const { data: run, error: runError } = await supabase
     .from("flow_runs")
@@ -219,7 +238,10 @@ export async function processFlowEngine(supabase: Client, conversationId: string
     .eq("id", conversation.contact_id)
     .single();
   if (contactError) throw contactError;
-  if (!assertCanContact(contact.consent_status).allowed) return;
+  if (!assertCanContact(contact.consent_status).allowed) {
+    console.log(`[flow-engine] contacto sin consentimiento vigente: ${contact.consent_status}`);
+    return;
+  }
 
   const { data: lastInbound } = await supabase
     .from("messages")
@@ -230,8 +252,12 @@ export async function processFlowEngine(supabase: Client, conversationId: string
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!lastInbound) return;
+  if (!lastInbound) {
+    console.log("[flow-engine] sin mensaje entrante de texto en la conversación");
+    return;
+  }
   const replyBody = (lastInbound.content as { body?: string } | null)?.body ?? "";
+  console.log(`[flow-engine] procesando conv=${conversationId} replyBody="${replyBody}"`);
 
   const { data: activeRun } = await supabase
     .from("flow_runs")
@@ -241,10 +267,12 @@ export async function processFlowEngine(supabase: Client, conversationId: string
     .maybeSingle();
 
   if (activeRun) {
+    console.log(`[flow-engine] avanzando run activo ${activeRun.id}`);
     await advanceRun(supabase, activeRun, replyBody, contact.wa_id, conversationId, conversation.phone_number_id);
     return;
   }
 
+  console.log(`[flow-engine] sin run activo, buscando disparador para conv=${conversationId}`);
   await maybeStartRun(
     supabase,
     conversationId,
