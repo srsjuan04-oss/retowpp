@@ -25,12 +25,12 @@ async function buildConversationHistory(supabase: Client, conversationId: string
     .select("direction, message_type, content, created_at")
     .eq("conversation_id", conversationId)
     .eq("message_type", "text")
-    .order("created_at", { ascending: true })
+    .order("created_at", { ascending: false })
     .limit(HISTORY_LIMIT);
   if (error) throw error;
 
   const turns: HistoryTurn[] = [];
-  for (const m of data ?? []) {
+  for (const m of (data ?? []).reverse()) {
     const body = (m.content as { body?: string } | null)?.body;
     if (!body) continue;
     turns.push({ role: m.direction === "inbound" ? "user" : "assistant", content: body });
