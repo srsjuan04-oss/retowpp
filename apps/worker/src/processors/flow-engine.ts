@@ -147,21 +147,13 @@ async function maybeStartRun(
     return;
   }
 
-  const { data: phoneNumber, error: phoneError } = await supabase
-    .from("phone_numbers")
-    .select("waba_account_id")
-    .eq("id", phoneNumberRowId)
-    .single();
-  if (phoneError) throw phoneError;
-
-  const { data: template } = await supabase
-    .from("templates")
-    .select("id")
-    .eq("name", templateName)
-    .eq("waba_account_id", phoneNumber.waba_account_id)
-    .maybeSingle();
+  // Coincide por nombre solamente (no por waba_account_id de nuestra tabla): el
+  // envío real de plantillas tampoco filtra por eso, Meta resuelve el nombre
+  // dentro del número que envía. Si el mismo nombre existe en más de una WABA
+  // conectada, toma cualquiera — mismo criterio "opaco" que ya usa el envío.
+  const { data: template } = await supabase.from("templates").select("id").eq("name", templateName).limit(1).maybeSingle();
   if (!template) {
-    console.log(`[flow-engine] no se encontró template name=${templateName} waba=${phoneNumber.waba_account_id}`);
+    console.log(`[flow-engine] no se encontró ningún template con name=${templateName}`);
     return;
   }
 
