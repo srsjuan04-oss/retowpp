@@ -97,21 +97,6 @@ async function processInboundMessages(
       .select("id");
     if (messageError) throw messageError;
 
-    // Solo se dispara el agente de IA / motor de flujos ante un inbound nuevo de
-    // verdad (no en un reintento del mismo webhook, que con ignoreDuplicates no inserta nada).
-    if (insertedMessage && insertedMessage.length > 0 && messageType === "text") {
-      await aiAgentReplyQueue.add(
-        "reply",
-        { conversationId },
-        { jobId: `ai-agent-reply|${raw.id}`, attempts: 2, backoff: { type: "exponential", delay: 5000 } },
-      );
-      await flowEngineQueue.add(
-        "advance",
-        { conversationId },
-        { jobId: `flow-engine|${raw.id}`, attempts: 3, backoff: { type: "exponential", delay: 5000 } },
-      );
-    }
-
     const { data: conversation, error: conversationFetchError } = await supabase
       .from("conversations")
       .select("status")
@@ -126,6 +111,25 @@ async function processInboundMessages(
     if (conversation.status === "closed") conversationUpdate.status = "open";
 
     await supabase.from("conversations").update(conversationUpdate).eq("id", conversationId);
+
+    // Se dispara el agente de IA / motor de flujos DESPUÉS de persistir last_inbound_at:
+    // si se encolara antes, el worker de ai-agent-reply podía leer la conversación con
+    // last_inbound_at todavía en null (conversación nueva) y descartar la respuesta por
+    // la regla de ventana de 24h, en una carrera contra este mismo UPDATE.
+    // Solo se dispara ante un inbound nuevo de verdad (no en un reintento del mismo
+    // webhook, que con ignoreDuplicates no inserta nada).
+    if (insertedMessage && insertedMessage.length > 0 && messageType === "text") {
+      await aiAgentReplyQueue.add(
+        "reply",
+        { conversationId },
+        { jobId: `ai-agent-reply|${raw.id}`, attempts: 2, backoff: { type: "exponential", delay: 5000 } },
+      );
+      await flowEngineQueue.add(
+        "advance",
+        { conversationId },
+        { jobId: `flow-engine|${raw.id}`, attempts: 3, backoff: { type: "exponential", delay: 5000 } },
+      );
+    }
   }
 }
 
