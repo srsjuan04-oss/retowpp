@@ -19,7 +19,8 @@ const CreateFlowSchema = z.object({
 
 /** Crea el flujo inactivo (sin pasos todavía); se arma desde /flows/[flowId]. */
 export async function createFlow(_prev: ActionState | undefined, formData: FormData): Promise<ActionState> {
-  await requireRole("admin");
+  const session = await requireRole("admin");
+  if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
 
   const parsed = CreateFlowSchema.safeParse({
     name: formData.get("name"),
@@ -46,6 +47,7 @@ export async function createFlow(_prev: ActionState | undefined, formData: FormD
       name: parsed.data.name,
       waba_account_id: parsed.data.wabaAccountId,
       template_id: parsed.data.templateId,
+      company_id: session.companyId,
     })
     .select("id")
     .single();

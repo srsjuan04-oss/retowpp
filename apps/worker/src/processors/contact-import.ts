@@ -9,16 +9,30 @@ type Client = SupabaseClient<Database>;
 
 const RESERVED_COLUMNS = new Set(["phone", "telefono", "wa_id", "name", "tags"]);
 
-async function upsertTag(supabase: Client, name: string): Promise<string> {
-  const { data: existing } = await supabase.from("tags").select("id").eq("name", name).maybeSingle();
+async function upsertTag(supabase: Client, name: string, companyId: string): Promise<string> {
+  const { data: existing } = await supabase
+    .from("tags")
+    .select("id")
+    .eq("name", name)
+    .eq("company_id", companyId)
+    .maybeSingle();
   if (existing) return existing.id;
 
-  const { data: created, error } = await supabase.from("tags").insert({ name }).select("id").single();
+  const { data: created, error } = await supabase
+    .from("tags")
+    .insert({ name, company_id: companyId })
+    .select("id")
+    .single();
   if (error) throw error;
   return created.id;
 }
 
-async function importRow(supabase: Client, row: Record<string, string>, knownCustomFieldKeys: Set<string>): Promise<void> {
+async function importRow(
+  supabase: Client,
+  row: Record<string, string>,
+  knownCustomFieldKeys: Set<string>,
+  companyId: string,
+): Promise<void> {
   const rawPhone = row.phone ?? row.telefono ?? row.wa_id;
   const waId = rawPhone ? normalizeWaId(rawPhone) : null;
   if (!waId) throw new Error(`Teléfono inválido: "${rawPhone ?? ""}"`);
@@ -33,6 +47,7 @@ async function importRow(supabase: Client, row: Record<string, string>, knownCus
     .from("contacts")
     .select("id, custom_fields")
     .eq("wa_id", waId)
+    .eq("company_id", companyId)
     .maybeSingle();
 
   let contactId: string;
@@ -46,7 +61,7 @@ async function importRow(supabase: Client, row: Record<string, string>, knownCus
   } else {
     const { data: created, error: createError } = await supabase
       .from("contacts")
-      .insert({ wa_id: waId, display_name: row.name || null, custom_fields: customFields })
+      .insert({ wa_id: waId, display_name: row.name || null, custom_fields: customFields, company_id: companyId })
       .select("id")
       .single();
     if (createError) throw createError;
@@ -59,7 +74,7 @@ async function importRow(supabase: Client, row: Record<string, string>, knownCus
       .map((t) => t.trim())
       .filter(Boolean);
     for (const tagName of tagNames) {
-      const tagId = await upsertTag(supabase, tagName);
+      const tagId = await upsertTag(supabase, tagName, companyId);
       await supabase
         .from("contact_tags")
         .upsert({ contact_id: contactId, tag_id: tagId }, { onConflict: "contact_id,tag_id", ignoreDuplicates: true });
@@ -70,7 +85,7 @@ async function importRow(supabase: Client, row: Record<string, string>, knownCus
 export async function processContactImport(supabase: Client, contactImportId: string): Promise<void> {
   const { data: importRowData, error } = await supabase
     .from("contact_imports")
-    .select("id, file_path, status")
+    .select("id, file_path, status, company_id")
     .eq("id", contactImportId)
     .single();
   if (error) throw error;
@@ -78,7 +93,10 @@ export async function processContactImport(supabase: Client, contactImportId: st
 
   await supabase.from("contact_imports").update({ status: "processing" }).eq("id", contactImportId);
 
-  const { data: fieldDefinitions } = await supabase.from("custom_field_definitions").select("key");
+  const { data: fieldDefinitions } = await supabase
+    .from("custom_field_definitions")
+    .select("key")
+    .eq("company_id", importRowData.company_id);
   const knownCustomFieldKeys = new Set((fieldDefinitions ?? []).map((f) => f.key));
 
   const { data: fileBlob, error: downloadError } = await supabase.storage
@@ -97,7 +115,7 @@ export async function processContactImport(supabase: Client, contactImportId: st
 
   for (const row of rows) {
     try {
-      await importRow(supabase, row, knownCustomFieldKeys);
+      await importRow(supabase, row, knownCustomFieldKeys, importRowData.company_id);
       successCount++;
     } catch {
       errorCount++;

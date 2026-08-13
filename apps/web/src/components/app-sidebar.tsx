@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3,
   Bot,
+  Building2,
   Inbox,
   LayoutGrid,
   LogOut,
@@ -47,10 +48,12 @@ function isActive(pathname: string, href: string) {
 
 export function AppSidebar({
   role,
+  isPlatformAdmin,
   displayName,
   logoutAction,
 }: {
   role: Role;
+  isPlatformAdmin: boolean;
   displayName: string;
   logoutAction: () => Promise<void>;
 }) {
@@ -87,6 +90,26 @@ export function AppSidebar({
           );
         })}
       </nav>
+
+      {isPlatformAdmin && (
+        <div className="flex flex-col gap-0.5 border-t border-sidebar-border px-3 py-3">
+          <span className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-sidebar-foreground/50">
+            Plataforma
+          </span>
+          <Link
+            href="/plataforma/empresas"
+            className={cn(
+              "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
+              isActive(pathname, "/plataforma/empresas")
+                ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+            )}
+          >
+            <Building2 className="size-4 shrink-0" />
+            Empresas
+          </Link>
+        </div>
+      )}
 
       <div className="flex flex-col gap-2 border-t border-sidebar-border px-3 py-3">
         <div className="truncate px-2 text-xs text-sidebar-foreground/60" title={displayName}>

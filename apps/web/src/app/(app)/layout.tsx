@@ -7,7 +7,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      <AppSidebar role={session.role} displayName={session.fullName ?? session.email ?? "Usuario"} logoutAction={logout} />
+      <AppSidebar
+        role={session.role}
+        isPlatformAdmin={session.isPlatformAdmin}
+        displayName={session.fullName ?? session.email ?? "Usuario"}
+        logoutAction={logout}
+      />
       <main className="flex flex-1 flex-col overflow-y-auto">{children}</main>
     </div>
   );

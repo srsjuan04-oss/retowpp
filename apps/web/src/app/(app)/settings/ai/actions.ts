@@ -25,7 +25,8 @@ const ConnectSchema = z.object({
  * vacío) — igual que el patrón de "dejar en blanco para no cambiar" del token de WABA.
  */
 export async function connectAnthropic(_prev: ActionState | undefined, formData: FormData): Promise<ActionState> {
-  await requireRole("admin");
+  const session = await requireRole("admin");
+  if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
 
   const parsed = ConnectSchema.safeParse({
     apiKey: formData.get("apiKey") || undefined,
@@ -60,6 +61,7 @@ export async function connectAnthropic(_prev: ActionState | undefined, formData:
     const { error } = await supabase.from("ai_agent_settings").insert({
       ...baseFields,
       anthropic_api_key_encrypted: encryptWabaToken(parsed.data.apiKey!, encryptionKey),
+      company_id: session.companyId,
     });
     if (error) return { error: error.message };
   }
@@ -91,6 +93,7 @@ const AddMcpServerSchema = z.object({
 /** Agrega un servidor MCP externo que el agente podrá usar como herramientas (módulo de IA). */
 export async function addMcpServer(_prev: ActionState | undefined, formData: FormData): Promise<ActionState> {
   const session = await requireRole("admin");
+  if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
 
   const parsed = AddMcpServerSchema.safeParse({
     name: formData.get("name"),
@@ -110,6 +113,7 @@ export async function addMcpServer(_prev: ActionState | undefined, formData: For
       ? encryptWabaToken(parsed.data.authorizationToken, encryptionKey)
       : null,
     created_by: session.id,
+    company_id: session.companyId,
   });
   if (error) return { error: error.code === "23505" ? "Ya existe un servidor MCP con ese nombre." : error.message };
 

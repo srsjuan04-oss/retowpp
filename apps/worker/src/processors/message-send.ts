@@ -59,7 +59,7 @@ export async function processMessageSend(supabase: Client, campaignId: string, c
 
   const { data: campaign, error: campaignError } = await supabase
     .from("campaigns")
-    .select("template_id, phone_number_id")
+    .select("template_id, phone_number_id, company_id")
     .eq("id", campaignId)
     .single();
   if (campaignError) throw campaignError;
@@ -105,7 +105,7 @@ export async function processMessageSend(supabase: Client, campaignId: string, c
     });
     const wamid = response.messages[0]?.id ?? null;
 
-    const conversationId = await findOrCreateConversation(supabase, contactId, campaign.phone_number_id);
+    const conversationId = await findOrCreateConversation(supabase, contactId, campaign.phone_number_id, campaign.company_id);
     const { data: message, error: messageError } = await supabase
       .from("messages")
       .insert({

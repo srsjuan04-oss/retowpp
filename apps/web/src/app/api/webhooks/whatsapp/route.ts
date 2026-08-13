@@ -53,9 +53,11 @@ export async function POST(request: NextRequest) {
   const supabase = createAdminClient();
 
   let wabaAccountId: string | null = null;
+  let companyId: string | null = null;
   if (wabaId) {
-    const { data } = await supabase.from("waba_accounts").select("id").eq("waba_id", wabaId).maybeSingle();
+    const { data } = await supabase.from("waba_accounts").select("id, company_id").eq("waba_id", wabaId).maybeSingle();
     wabaAccountId = data?.id ?? null;
+    companyId = data?.company_id ?? null;
   }
 
   const { data: inserted, error } = await supabase
@@ -63,6 +65,7 @@ export async function POST(request: NextRequest) {
     .upsert(
       {
         waba_account_id: wabaAccountId,
+        company_id: companyId,
         event_type: eventType,
         // Se guarda tal cual llega de Meta; el tipado fuerte de WhatsAppWebhookPayload
         // es solo para el código que lo interpreta, no restringe lo que cabe en jsonb.

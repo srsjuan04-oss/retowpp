@@ -17,6 +17,7 @@ async function syncWabaTemplates(
   supabase: Client,
   wabaAccountId: string,
   wabaId: string,
+  companyId: string,
   accessTokenEncrypted: string,
 ): Promise<void> {
   const encryptionKey = process.env.WABA_TOKEN_ENCRYPTION_KEY;
@@ -35,6 +36,7 @@ async function syncWabaTemplates(
     await supabase.from("templates").upsert(
       {
         waba_account_id: wabaAccountId,
+        company_id: companyId,
         meta_template_id: template.id,
         name: template.name,
         language: template.language,
@@ -52,12 +54,12 @@ async function syncWabaTemplates(
 export async function syncAllTemplates(supabase: Client): Promise<void> {
   const { data: wabaAccounts, error } = await supabase
     .from("waba_accounts")
-    .select("id, waba_id, access_token_encrypted")
+    .select("id, waba_id, company_id, access_token_encrypted")
     .eq("is_active", true);
   if (error) throw error;
 
   for (const account of wabaAccounts ?? []) {
-    await syncWabaTemplates(supabase, account.id, account.waba_id, account.access_token_encrypted);
+    await syncWabaTemplates(supabase, account.id, account.waba_id, account.company_id, account.access_token_encrypted);
   }
 }
 

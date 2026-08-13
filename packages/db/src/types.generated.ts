@@ -24,6 +24,7 @@ export type Database = {
       ai_agent_settings: {
         Row: {
           anthropic_api_key_encrypted: string
+          company_id: string
           created_at: string
           id: string
           is_enabled: boolean
@@ -33,6 +34,7 @@ export type Database = {
         }
         Insert: {
           anthropic_api_key_encrypted: string
+          company_id: string
           created_at?: string
           id?: string
           is_enabled?: boolean
@@ -42,6 +44,7 @@ export type Database = {
         }
         Update: {
           anthropic_api_key_encrypted?: string
+          company_id?: string
           created_at?: string
           id?: string
           is_enabled?: boolean
@@ -49,12 +52,21 @@ export type Database = {
           system_prompt?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ai_agent_settings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       audit_log: {
         Row: {
           action: string
           actor_id: string | null
+          company_id: string | null
           created_at: string
           entity_id: string | null
           entity_type: string
@@ -64,6 +76,7 @@ export type Database = {
         Insert: {
           action: string
           actor_id?: string | null
+          company_id?: string | null
           created_at?: string
           entity_id?: string | null
           entity_type: string
@@ -73,6 +86,7 @@ export type Database = {
         Update: {
           action?: string
           actor_id?: string | null
+          company_id?: string | null
           created_at?: string
           entity_id?: string | null
           entity_type?: string
@@ -85,6 +99,13 @@ export type Database = {
             columns: ["actor_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_log_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -194,6 +215,7 @@ export type Database = {
       campaigns: {
         Row: {
           audience_filter: Json
+          company_id: string
           completed_at: string | null
           created_at: string
           created_by: string | null
@@ -210,6 +232,7 @@ export type Database = {
         }
         Insert: {
           audience_filter?: Json
+          company_id: string
           completed_at?: string | null
           created_at?: string
           created_by?: string | null
@@ -226,6 +249,7 @@ export type Database = {
         }
         Update: {
           audience_filter?: Json
+          company_id?: string
           completed_at?: string | null
           created_at?: string
           created_by?: string | null
@@ -241,6 +265,13 @@ export type Database = {
           variable_mapping?: Json
         }
         Relationships: [
+          {
+            foreignKeyName: "campaigns_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "campaigns_created_by_fkey"
             columns: ["created_by"]
@@ -264,8 +295,30 @@ export type Database = {
           },
         ]
       }
+      companies: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
       contact_imports: {
         Row: {
+          company_id: string
           created_at: string
           error_count: number
           error_report_path: string | null
@@ -278,6 +331,7 @@ export type Database = {
           uploaded_by: string | null
         }
         Insert: {
+          company_id: string
           created_at?: string
           error_count?: number
           error_report_path?: string | null
@@ -290,6 +344,7 @@ export type Database = {
           uploaded_by?: string | null
         }
         Update: {
+          company_id?: string
           created_at?: string
           error_count?: number
           error_report_path?: string | null
@@ -302,6 +357,13 @@ export type Database = {
           uploaded_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "contact_imports_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "contact_imports_uploaded_by_fkey"
             columns: ["uploaded_by"]
@@ -347,6 +409,7 @@ export type Database = {
       contacts: {
         Row: {
           blocked_at: string | null
+          company_id: string
           consent_source: string | null
           consent_status: Database["public"]["Enums"]["consent_status"]
           created_at: string
@@ -359,6 +422,7 @@ export type Database = {
         }
         Insert: {
           blocked_at?: string | null
+          company_id: string
           consent_source?: string | null
           consent_status?: Database["public"]["Enums"]["consent_status"]
           created_at?: string
@@ -371,6 +435,7 @@ export type Database = {
         }
         Update: {
           blocked_at?: string | null
+          company_id?: string
           consent_source?: string | null
           consent_status?: Database["public"]["Enums"]["consent_status"]
           created_at?: string
@@ -381,12 +446,21 @@ export type Database = {
           updated_at?: string
           wa_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "contacts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       conversations: {
         Row: {
           assigned_team_id: string | null
           assigned_to: string | null
+          company_id: string
           contact_id: string
           created_at: string
           id: string
@@ -400,6 +474,7 @@ export type Database = {
         Insert: {
           assigned_team_id?: string | null
           assigned_to?: string | null
+          company_id: string
           contact_id: string
           created_at?: string
           id?: string
@@ -413,6 +488,7 @@ export type Database = {
         Update: {
           assigned_team_id?: string | null
           assigned_to?: string | null
+          company_id?: string
           contact_id?: string
           created_at?: string
           id?: string
@@ -439,6 +515,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "conversations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "conversations_contact_id_fkey"
             columns: ["contact_id"]
             isOneToOne: false
@@ -456,6 +539,7 @@ export type Database = {
       }
       custom_field_definitions: {
         Row: {
+          company_id: string
           created_at: string
           field_type: string
           id: string
@@ -464,6 +548,7 @@ export type Database = {
           options: Json | null
         }
         Insert: {
+          company_id: string
           created_at?: string
           field_type: string
           id?: string
@@ -472,6 +557,7 @@ export type Database = {
           options?: Json | null
         }
         Update: {
+          company_id?: string
           created_at?: string
           field_type?: string
           id?: string
@@ -479,7 +565,15 @@ export type Database = {
           label?: string
           options?: Json | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "custom_field_definitions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       flow_branches: {
         Row: {
@@ -634,6 +728,7 @@ export type Database = {
       }
       flows: {
         Row: {
+          company_id: string
           created_at: string
           created_by: string | null
           id: string
@@ -644,6 +739,7 @@ export type Database = {
           waba_account_id: string
         }
         Insert: {
+          company_id: string
           created_at?: string
           created_by?: string | null
           id?: string
@@ -654,6 +750,7 @@ export type Database = {
           waba_account_id: string
         }
         Update: {
+          company_id?: string
           created_at?: string
           created_by?: string | null
           id?: string
@@ -664,6 +761,13 @@ export type Database = {
           waba_account_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "flows_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "flows_created_by_fkey"
             columns: ["created_by"]
@@ -737,6 +841,7 @@ export type Database = {
       }
       hotmart_webhooks: {
         Row: {
+          company_id: string
           created_at: string
           created_by: string | null
           event: Database["public"]["Enums"]["hotmart_event"]
@@ -749,6 +854,7 @@ export type Database = {
           variable_mapping: Json
         }
         Insert: {
+          company_id: string
           created_at?: string
           created_by?: string | null
           event: Database["public"]["Enums"]["hotmart_event"]
@@ -761,6 +867,7 @@ export type Database = {
           variable_mapping?: Json
         }
         Update: {
+          company_id?: string
           created_at?: string
           created_by?: string | null
           event?: Database["public"]["Enums"]["hotmart_event"]
@@ -773,6 +880,13 @@ export type Database = {
           variable_mapping?: Json
         }
         Relationships: [
+          {
+            foreignKeyName: "hotmart_webhooks_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "hotmart_webhooks_created_by_fkey"
             columns: ["created_by"]
@@ -799,6 +913,7 @@ export type Database = {
       mcp_servers: {
         Row: {
           authorization_token_encrypted: string | null
+          company_id: string
           created_at: string
           created_by: string | null
           id: string
@@ -809,6 +924,7 @@ export type Database = {
         }
         Insert: {
           authorization_token_encrypted?: string | null
+          company_id: string
           created_at?: string
           created_by?: string | null
           id?: string
@@ -819,6 +935,7 @@ export type Database = {
         }
         Update: {
           authorization_token_encrypted?: string | null
+          company_id?: string
           created_at?: string
           created_by?: string | null
           id?: string
@@ -828,6 +945,13 @@ export type Database = {
           url?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "mcp_servers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "mcp_servers_created_by_fkey"
             columns: ["created_by"]
@@ -943,6 +1067,7 @@ export type Database = {
       }
       phone_numbers: {
         Row: {
+          company_id: string
           created_at: string
           display_phone_number: string
           id: string
@@ -954,6 +1079,7 @@ export type Database = {
           waba_account_id: string
         }
         Insert: {
+          company_id: string
           created_at?: string
           display_phone_number: string
           id?: string
@@ -965,6 +1091,7 @@ export type Database = {
           waba_account_id: string
         }
         Update: {
+          company_id?: string
           created_at?: string
           display_phone_number?: string
           id?: string
@@ -977,6 +1104,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "phone_numbers_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "phone_numbers_waba_account_id_fkey"
             columns: ["waba_account_id"]
             isOneToOne: false
@@ -987,51 +1121,76 @@ export type Database = {
       }
       profiles: {
         Row: {
+          company_id: string | null
           created_at: string
           full_name: string | null
           id: string
           is_active: boolean
+          is_platform_admin: boolean
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
         }
         Insert: {
+          company_id?: string | null
           created_at?: string
           full_name?: string | null
           id: string
           is_active?: boolean
+          is_platform_admin?: boolean
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
         Update: {
+          company_id?: string | null
           created_at?: string
           full_name?: string | null
           id?: string
           is_active?: boolean
+          is_platform_admin?: boolean
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tags: {
         Row: {
           color: string
+          company_id: string
           created_at: string
           id: string
           name: string
         }
         Insert: {
           color?: string
+          company_id: string
           created_at?: string
           id?: string
           name: string
         }
         Update: {
           color?: string
+          company_id?: string
           created_at?: string
           id?: string
           name?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tags_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       team_members: {
         Row: {
@@ -1071,28 +1230,40 @@ export type Database = {
       }
       teams: {
         Row: {
+          company_id: string
           created_at: string
           description: string | null
           id: string
           name: string
         }
         Insert: {
+          company_id: string
           created_at?: string
           description?: string | null
           id?: string
           name: string
         }
         Update: {
+          company_id?: string
           created_at?: string
           description?: string | null
           id?: string
           name?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "teams_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       templates: {
         Row: {
           category: string
+          company_id: string
           components: Json
           created_at: string
           id: string
@@ -1105,6 +1276,7 @@ export type Database = {
         }
         Insert: {
           category: string
+          company_id: string
           components?: Json
           created_at?: string
           id?: string
@@ -1117,6 +1289,7 @@ export type Database = {
         }
         Update: {
           category?: string
+          company_id?: string
           components?: Json
           created_at?: string
           id?: string
@@ -1128,6 +1301,13 @@ export type Database = {
           waba_account_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "templates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "templates_waba_account_id_fkey"
             columns: ["waba_account_id"]
@@ -1142,6 +1322,7 @@ export type Database = {
           access_token_encrypted: string
           app_secret_ref: string
           business_name: string
+          company_id: string
           created_at: string
           id: string
           is_active: boolean
@@ -1152,6 +1333,7 @@ export type Database = {
           access_token_encrypted: string
           app_secret_ref: string
           business_name: string
+          company_id: string
           created_at?: string
           id?: string
           is_active?: boolean
@@ -1162,16 +1344,26 @@ export type Database = {
           access_token_encrypted?: string
           app_secret_ref?: string
           business_name?: string
+          company_id?: string
           created_at?: string
           id?: string
           is_active?: boolean
           updated_at?: string
           waba_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "waba_accounts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       webhook_events: {
         Row: {
+          company_id: string | null
           dedupe_key: string
           event_type: string
           id: string
@@ -1184,6 +1376,7 @@ export type Database = {
           waba_account_id: string | null
         }
         Insert: {
+          company_id?: string | null
           dedupe_key: string
           event_type: string
           id?: string
@@ -1196,6 +1389,7 @@ export type Database = {
           waba_account_id?: string | null
         }
         Update: {
+          company_id?: string | null
           dedupe_key?: string
           event_type?: string
           id?: string
@@ -1208,6 +1402,13 @@ export type Database = {
           waba_account_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "webhook_events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "webhook_events_waba_account_id_fkey"
             columns: ["waba_account_id"]
@@ -1222,6 +1423,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      current_company_id: { Args: never; Returns: string }
       current_user_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
@@ -1232,6 +1434,7 @@ export type Database = {
         Args: { p_assigned_team_id: string; p_assigned_to: string }
         Returns: boolean
       }
+      is_platform_admin: { Args: never; Returns: boolean }
     }
     Enums: {
       campaign_recipient_status:

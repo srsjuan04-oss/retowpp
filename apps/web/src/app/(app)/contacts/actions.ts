@@ -79,7 +79,8 @@ const CreateContactSchema = z.object({
 });
 
 export async function createContact(_prev: ActionState | undefined, formData: FormData): Promise<ActionState> {
-  await verifySession();
+  const session = await verifySession();
+  if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
   const parsed = CreateContactSchema.safeParse({
     waId: formData.get("waId"),
     displayName: formData.get("displayName") || undefined,
@@ -94,7 +95,7 @@ export async function createContact(_prev: ActionState | undefined, formData: Fo
   const supabase = await createClient();
   const { data: contact, error } = await supabase
     .from("contacts")
-    .insert({ wa_id: waId, display_name: parsed.data.displayName ?? null })
+    .insert({ wa_id: waId, display_name: parsed.data.displayName ?? null, company_id: session.companyId })
     .select("id")
     .single();
   if (error) return { error: error.message };
@@ -136,7 +137,8 @@ const CreateTagSchema = z.object({
 
 /** Crear etiquetas está restringido a admin/supervisor (RLS de la tabla tags). */
 export async function createTag(_prev: ActionState | undefined, formData: FormData): Promise<ActionState> {
-  await requireRole("admin", "supervisor");
+  const session = await requireRole("admin", "supervisor");
+  if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
   const parsed = CreateTagSchema.safeParse({
     name: formData.get("name"),
     color: formData.get("color") || "#6b7280",
@@ -144,7 +146,7 @@ export async function createTag(_prev: ActionState | undefined, formData: FormDa
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("tags").insert(parsed.data);
+  const { error } = await supabase.from("tags").insert({ ...parsed.data, company_id: session.companyId });
   if (error) return { error: error.message };
 
   revalidatePath("/contacts");
@@ -165,7 +167,8 @@ export async function createCustomFieldDefinition(
   _prev: ActionState | undefined,
   formData: FormData,
 ): Promise<ActionState> {
-  await requireRole("admin");
+  const session = await requireRole("admin");
+  if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
   const parsed = CreateCustomFieldSchema.safeParse({
     key: formData.get("key"),
     label: formData.get("label"),
@@ -178,6 +181,7 @@ export async function createCustomFieldDefinition(
     key: parsed.data.key,
     label: parsed.data.label,
     field_type: parsed.data.fieldType,
+    company_id: session.companyId,
   });
   if (error) return { error: error.message };
 

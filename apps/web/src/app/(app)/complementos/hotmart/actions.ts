@@ -27,6 +27,7 @@ export async function createHotmartWebhook(_prev: ActionState | undefined, formD
     phoneNumberId: formData.get("phoneNumberId"),
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+  if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
 
   const variableMapping: Record<string, string> = {};
   for (const [key, value] of formData.entries()) {
@@ -43,6 +44,7 @@ export async function createHotmartWebhook(_prev: ActionState | undefined, formD
     phone_number_id: parsed.data.phoneNumberId,
     variable_mapping: variableMapping,
     created_by: session.id,
+    company_id: session.companyId,
   });
   if (error) return { error: error.message };
 

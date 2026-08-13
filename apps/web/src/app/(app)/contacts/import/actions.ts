@@ -16,6 +16,7 @@ export interface UploadCsvState {
  */
 export async function uploadContactsCsv(_prev: UploadCsvState | undefined, formData: FormData): Promise<UploadCsvState> {
   const session = await verifySession();
+  if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) return { error: "Selecciona un archivo CSV." };
@@ -31,7 +32,7 @@ export async function uploadContactsCsv(_prev: UploadCsvState | undefined, formD
 
   const { data: importRow, error: insertError } = await supabase
     .from("contact_imports")
-    .insert({ uploaded_by: session.id, file_path: path })
+    .insert({ uploaded_by: session.id, file_path: path, company_id: session.companyId })
     .select("id")
     .single();
   if (insertError) return { error: insertError.message };

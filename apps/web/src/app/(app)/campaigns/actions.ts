@@ -22,7 +22,8 @@ const CreateCampaignSchema = z.object({
 
 /** Crea la campaña en borrador con su filtro de audiencia y mapeo de variables. */
 export async function createCampaign(_prev: ActionState | undefined, formData: FormData): Promise<ActionState> {
-  await requireRole("admin", "supervisor");
+  const session = await requireRole("admin", "supervisor");
+  if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
 
   const parsed = CreateCampaignSchema.safeParse({
     name: formData.get("name"),
@@ -50,6 +51,7 @@ export async function createCampaign(_prev: ActionState | undefined, formData: F
       phone_number_id: parsed.data.phoneNumberId,
       variable_mapping: variableMapping,
       audience_filter: { includeTagIds, excludeTagIds } satisfies AudienceFilter,
+      company_id: session.companyId,
     })
     .select("id")
     .single();

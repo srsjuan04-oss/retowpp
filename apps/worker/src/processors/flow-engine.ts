@@ -122,6 +122,7 @@ async function maybeStartRun(
   conversationId: string,
   contactId: string,
   phoneNumberRowId: string,
+  companyId: string,
   inboundCreatedAt: string,
   inboundWamid: string | null,
   waId: string,
@@ -141,17 +142,25 @@ async function maybeStartRun(
   const templateName = (lastOutboundTemplate.content as { templateName?: string } | null)?.templateName;
   if (!templateName) return;
 
-  // Coincide por nombre solamente (no por waba_account_id de nuestra tabla): el
+  // Coincide por nombre + company_id (no por waba_account_id de nuestra tabla): el
   // envío real de plantillas tampoco filtra por eso, Meta resuelve el nombre
-  // dentro del número que envía. Si el mismo nombre existe en más de una WABA
-  // conectada, toma cualquiera — mismo criterio "opaco" que ya usa el envío.
-  const { data: template } = await supabase.from("templates").select("id").eq("name", templateName).limit(1).maybeSingle();
+  // dentro del número que envía. El filtro por company_id es obligatorio: sin él,
+  // una plantilla con el mismo nombre en OTRA empresa podría disparar el flujo
+  // equivocado en esta conversación.
+  const { data: template } = await supabase
+    .from("templates")
+    .select("id")
+    .eq("name", templateName)
+    .eq("company_id", companyId)
+    .limit(1)
+    .maybeSingle();
   if (!template) return;
 
   const { data: flow } = await supabase
     .from("flows")
     .select("id")
     .eq("template_id", template.id)
+    .eq("company_id", companyId)
     .eq("is_active", true)
     .maybeSingle();
   if (!flow) return;
@@ -200,7 +209,7 @@ async function maybeStartRun(
 export async function processFlowEngine(supabase: Client, conversationId: string): Promise<void> {
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("contact_id, phone_number_id")
+    .select("contact_id, phone_number_id, company_id")
     .eq("id", conversationId)
     .single();
   if (conversationError) throw conversationError;
@@ -242,6 +251,7 @@ export async function processFlowEngine(supabase: Client, conversationId: string
     conversationId,
     conversation.contact_id,
     conversation.phone_number_id,
+    conversation.company_id,
     lastInbound.created_at,
     lastInbound.wamid,
     contact.wa_id,

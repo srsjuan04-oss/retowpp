@@ -17,13 +17,18 @@ import { findOrCreateConversation } from "../lib/conversations";
 
 type Client = SupabaseClient<Database>;
 
-async function findOrCreateContact(supabase: Client, waId: string, displayName: string | null) {
-  const { data: existing } = await supabase.from("contacts").select("id").eq("wa_id", waId).maybeSingle();
+async function findOrCreateContact(supabase: Client, waId: string, companyId: string, displayName: string | null) {
+  const { data: existing } = await supabase
+    .from("contacts")
+    .select("id")
+    .eq("wa_id", waId)
+    .eq("company_id", companyId)
+    .maybeSingle();
   if (existing) return existing.id;
 
   const { data: created, error } = await supabase
     .from("contacts")
-    .insert({ wa_id: waId, display_name: displayName, consent_source: "hotmart_purchase" })
+    .insert({ wa_id: waId, display_name: displayName, consent_source: "hotmart_purchase", company_id: companyId })
     .select("id")
     .single();
   if (error) throw error;
@@ -49,7 +54,7 @@ export async function processHotmartWebhookEvent(supabase: Client, eventId: stri
 
   const { data: config, error: configError } = await supabase
     .from("hotmart_webhooks")
-    .select("template_id, phone_number_id, variable_mapping, is_active")
+    .select("template_id, phone_number_id, variable_mapping, is_active, company_id")
     .eq("id", event.hotmart_webhook_id)
     .single();
   if (configError) throw configError;
@@ -82,8 +87,8 @@ export async function processHotmartWebhookEvent(supabase: Client, eventId: stri
     return;
   }
 
-  const contactId = await findOrCreateContact(supabase, waId, purchase.buyerName);
-  const conversationId = await findOrCreateConversation(supabase, contactId, config.phone_number_id);
+  const contactId = await findOrCreateContact(supabase, waId, config.company_id, purchase.buyerName);
+  const conversationId = await findOrCreateConversation(supabase, contactId, config.phone_number_id, config.company_id);
 
   try {
     const client = await getWhatsAppClientForPhoneNumber(supabase, config.phone_number_id);

@@ -53,19 +53,20 @@ function extractReplyText(content: Array<{ type: string; text?: string }>): stri
  * de la misma respuesta, sin loop de tool-use manual de nuestro lado.
  */
 export async function processAiAgentReply(supabase: Client, conversationId: string): Promise<void> {
-  const { data: settings, error: settingsError } = await supabase
-    .from("ai_agent_settings")
-    .select("id, is_enabled, anthropic_api_key_encrypted, model, system_prompt")
-    .maybeSingle();
-  if (settingsError) throw settingsError;
-  if (!settings || !settings.is_enabled) return;
-
   const { data: conversation, error: conversationError } = await supabase
     .from("conversations")
-    .select("contact_id, phone_number_id, last_inbound_at")
+    .select("contact_id, phone_number_id, last_inbound_at, company_id")
     .eq("id", conversationId)
     .single();
   if (conversationError) throw conversationError;
+
+  const { data: settings, error: settingsError } = await supabase
+    .from("ai_agent_settings")
+    .select("id, is_enabled, anthropic_api_key_encrypted, model, system_prompt")
+    .eq("company_id", conversation.company_id)
+    .maybeSingle();
+  if (settingsError) throw settingsError;
+  if (!settings || !settings.is_enabled) return;
 
   const { data: contact, error: contactError } = await supabase
     .from("contacts")
@@ -86,6 +87,7 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
   const { data: mcpServerRows, error: mcpError } = await supabase
     .from("mcp_servers")
     .select("name, url, authorization_token_encrypted")
+    .eq("company_id", conversation.company_id)
     .eq("is_active", true);
   if (mcpError) throw mcpError;
 

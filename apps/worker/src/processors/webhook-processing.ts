@@ -33,23 +33,30 @@ function mapInboundMessageType(rawType: string): Database["public"]["Enums"]["me
   return (KNOWN_MESSAGE_TYPES.has(rawType) ? rawType : "unknown") as Database["public"]["Enums"]["message_type"];
 }
 
-async function findOrCreateContact(supabase: Client, waId: string, profileName: string | undefined) {
-  const { data: existing } = await supabase.from("contacts").select("id").eq("wa_id", waId).maybeSingle();
+async function findOrCreateContact(supabase: Client, waId: string, companyId: string, profileName: string | undefined) {
+  // wa_id ya no es único a nivel global: el mismo número puede ser contacto
+  // de más de una empresa, cada una con sus propios datos.
+  const { data: existing } = await supabase
+    .from("contacts")
+    .select("id")
+    .eq("wa_id", waId)
+    .eq("company_id", companyId)
+    .maybeSingle();
   if (existing) return existing.id;
 
   const { data: created, error } = await supabase
     .from("contacts")
-    .insert({ wa_id: waId, display_name: profileName ?? null })
+    .insert({ wa_id: waId, display_name: profileName ?? null, company_id: companyId })
     .select("id")
     .single();
   if (error) throw error;
   return created.id;
 }
 
-async function findPhoneNumberRowId(supabase: Client, metaPhoneNumberId: string) {
+async function findPhoneNumberRow(supabase: Client, metaPhoneNumberId: string) {
   const { data } = await supabase
     .from("phone_numbers")
-    .select("id")
+    .select("id, company_id")
     .eq("phone_number_id", metaPhoneNumberId)
     .maybeSingle();
   if (!data) {
@@ -57,7 +64,7 @@ async function findPhoneNumberRowId(supabase: Client, metaPhoneNumberId: string)
       `phone_number_id ${metaPhoneNumberId} no está configurado en phone_numbers; revisa el módulo de conexión WABA.`,
     );
   }
-  return data.id;
+  return data;
 }
 
 async function processInboundMessages(
@@ -67,12 +74,14 @@ async function processInboundMessages(
   flowEngineQueue: Queue,
 ) {
   const metaPhoneNumberId = value.metadata.phone_number_id;
-  const phoneNumberRowId = await findPhoneNumberRowId(supabase, metaPhoneNumberId);
+  const phoneNumberRow = await findPhoneNumberRow(supabase, metaPhoneNumberId);
+  const phoneNumberRowId = phoneNumberRow.id;
+  const companyId = phoneNumberRow.company_id;
   const profileByWaId = new Map((value.contacts ?? []).map((c) => [c.wa_id, c.profile?.name]));
 
   for (const raw of value.messages ?? []) {
-    const contactId = await findOrCreateContact(supabase, raw.from, profileByWaId.get(raw.from));
-    const conversationId = await findOrCreateConversation(supabase, contactId, phoneNumberRowId);
+    const contactId = await findOrCreateContact(supabase, raw.from, companyId, profileByWaId.get(raw.from));
+    const conversationId = await findOrCreateConversation(supabase, contactId, phoneNumberRowId, companyId);
 
     const messageType = mapInboundMessageType(raw.type);
     const mediaId = MEDIA_MESSAGE_TYPES.has(raw.type) ? ((raw[raw.type] as { id?: string })?.id ?? null) : null;
