@@ -64,9 +64,9 @@ export function AppSidebar({
     <aside className="flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
       <div className="flex items-center gap-2 px-5 py-5">
         <span className="flex h-7 w-7 items-center justify-center rounded-md bg-brand text-sm font-semibold text-brand-foreground">
-          W
+          C
         </span>
-        <span className="text-sm font-semibold tracking-tight">Reto WhatsApp</span>
+        <span className="text-sm font-semibold tracking-tight">app.charlia</span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3">
