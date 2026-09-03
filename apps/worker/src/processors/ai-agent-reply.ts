@@ -110,7 +110,8 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
   const anthropic = new Anthropic({ apiKey: decryptWabaToken(settings.anthropic_api_key_encrypted, encryptionKey) });
   const now = new Date();
   const currentDateContext = `\n\n## FECHA Y HORA ACTUALES (dato real, no lo asumas nunca)\n\nHoy es ${now.toLocaleDateString("es-CO", { timeZone: "America/Bogota", weekday: "long", year: "numeric", month: "long", day: "numeric" })}, son las ${now.toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" })} hora de Colombia. Usa este dato como única fuente de verdad para resolver cualquier fecha relativa ("hoy", "mañana", "el viernes", "el 13 de agosto") y para construir el año en cualquier YYYY-MM-DD que envíes a una herramienta MCP.`;
-  const system = (settings.system_prompt || DEFAULT_SYSTEM_PROMPT) + currentDateContext + NO_MARKDOWN_CONTEXT;
+  const customerContext = `\n\n## NÚMERO DE WHATSAPP DEL CLIENTE (dato real, no lo asumas ni lo inventes)\n\nEste cliente te está escribiendo desde el número ${contact.wa_id}. Úsalo como "phone" en las herramientas MCP (list_customer_appointments, reschedule_appointment, cancel_appointment, create_appointment, log_customer_note) para buscar o registrar sus citas — no le pidas su número salvo que quiera agendar o registrar a nombre de otra persona.`;
+  const system = (settings.system_prompt || DEFAULT_SYSTEM_PROMPT) + currentDateContext + NO_MARKDOWN_CONTEXT + customerContext;
 
   const response =
     mcpServers.length > 0
