@@ -10,8 +10,13 @@ type Client = SupabaseClient<Database>;
 
 const MCP_BETA_HEADER = "mcp-client-2025-11-20";
 const HISTORY_LIMIT = 20;
+// Mismo límite que la ventana de sesión de WhatsApp (24h): pasado ese tiempo sin
+// mensajes, un "hola" se trata como conversación nueva en vez de retomar un tema viejo.
+const HISTORY_WINDOW_HOURS = 24;
 const DEFAULT_SYSTEM_PROMPT =
   "Eres un agente de servicio al cliente por WhatsApp. Responde de forma breve, clara y amable, en español.";
+const NO_MARKDOWN_CONTEXT =
+  "\n\n## FORMATO (regla fija, no editable desde la configuración)\n\nNUNCA uses formato Markdown (nada de **negrilla** con doble asterisco, ni # títulos, ni listas con guiones). WhatsApp no lo interpreta y el cliente vería los símbolos tal cual. Si necesitas resaltar algo, usa *negrilla* con un solo asterisco (formato nativo de WhatsApp) o simplemente texto plano.";
 
 interface HistoryTurn {
   role: "user" | "assistant";
@@ -20,11 +25,13 @@ interface HistoryTurn {
 
 /** Solo mensajes de texto (los de plantilla/media no tienen un `body` legible para dar contexto al modelo). */
 async function buildConversationHistory(supabase: Client, conversationId: string): Promise<HistoryTurn[]> {
+  const windowStart = new Date(Date.now() - HISTORY_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from("messages")
     .select("direction, message_type, content, created_at")
     .eq("conversation_id", conversationId)
     .eq("message_type", "text")
+    .gte("created_at", windowStart)
     .order("created_at", { ascending: false })
     .limit(HISTORY_LIMIT);
   if (error) throw error;
@@ -103,7 +110,7 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
   const anthropic = new Anthropic({ apiKey: decryptWabaToken(settings.anthropic_api_key_encrypted, encryptionKey) });
   const now = new Date();
   const currentDateContext = `\n\n## FECHA Y HORA ACTUALES (dato real, no lo asumas nunca)\n\nHoy es ${now.toLocaleDateString("es-CO", { timeZone: "America/Bogota", weekday: "long", year: "numeric", month: "long", day: "numeric" })}, son las ${now.toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" })} hora de Colombia. Usa este dato como única fuente de verdad para resolver cualquier fecha relativa ("hoy", "mañana", "el viernes", "el 13 de agosto") y para construir el año en cualquier YYYY-MM-DD que envíes a una herramienta MCP.`;
-  const system = (settings.system_prompt || DEFAULT_SYSTEM_PROMPT) + currentDateContext;
+  const system = (settings.system_prompt || DEFAULT_SYSTEM_PROMPT) + currentDateContext + NO_MARKDOWN_CONTEXT;
 
   const response =
     mcpServers.length > 0
