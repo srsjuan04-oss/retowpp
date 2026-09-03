@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { formatContactName } from "@/lib/format";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import type { ConversationListItem } from "@/lib/inbox/queries";
 
@@ -61,7 +62,7 @@ export function ConversationList({ initialConversations }: { initialConversation
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" aria-label="No leído" />
               )}
               <span className={cn("font-medium", conversation.isUnread && "font-semibold text-foreground")}>
-                {conversation.contact.displayName ?? conversation.contact.waId}
+                {formatContactName(conversation.contact.displayName) ?? conversation.contact.waId}
               </span>
             </span>
             {conversation.lastMessagePreview && (

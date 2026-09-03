@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ConsentStatus } from "@reto-whatsapp/db";
 import { listContacts, listTags } from "@/lib/contacts/queries";
+import { formatContactName } from "@/lib/format";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { CreateContactForm } from "./create-contact-form";
 import { CreateTagForm } from "./create-tag-form";
@@ -98,7 +99,7 @@ export default async function ContactsPage({
                 <tr key={c.id} className="border-t hover:bg-accent/50">
                   <td className="px-3 py-2">
                     <Link href={`/contacts/${c.id}`} className="font-medium hover:underline">
-                      {c.displayName ?? "(sin nombre)"}
+                      {formatContactName(c.displayName) ?? "(sin nombre)"}
                     </Link>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">{c.waId}</td>

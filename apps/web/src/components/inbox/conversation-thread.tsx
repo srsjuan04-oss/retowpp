@@ -12,9 +12,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { formatContactName } from "@/lib/format";
 import type { AssignableProfile, ConversationDetail, MessageItem } from "@/lib/inbox/queries";
 import type { TemplateOption } from "@/lib/templates/queries";
 import { TemplatePicker } from "./template-picker";
+import { WhatsAppText } from "./whatsapp-text";
 
 const initialState: SendMessageState = {};
 
@@ -23,13 +25,6 @@ const CONVERSATION_STATUS_BADGE_VARIANTS: Record<string, BadgeProps["variant"]> 
   pending: "warning",
   closed: "neutral",
 };
-
-function renderMessageContent(message: MessageItem): string {
-  if (message.messageType === "text" && typeof message.content.body === "string") {
-    return message.content.body;
-  }
-  return `[${message.messageType}]`;
-}
 
 export function ConversationThread({
   conversation,
@@ -59,7 +54,9 @@ export function ConversationThread({
       <header className="flex items-center justify-between border-b px-4 py-3">
         <div className="flex items-center gap-2">
           <div>
-            <h2 className="font-medium">{conversation.contact.displayName ?? conversation.contact.waId}</h2>
+            <h2 className="font-medium">
+              {formatContactName(conversation.contact.displayName) ?? conversation.contact.waId}
+            </h2>
             <p className="text-xs text-muted-foreground">{conversation.contact.waId}</p>
           </div>
           <Badge variant={CONVERSATION_STATUS_BADGE_VARIANTS[conversation.status] ?? "neutral"}>
@@ -98,7 +95,13 @@ export function ConversationThread({
                 : "self-start bg-muted text-muted-foreground",
             )}
           >
-            <p>{renderMessageContent(message)}</p>
+            <p className="whitespace-pre-wrap">
+              {message.messageType === "text" && typeof message.content.body === "string" ? (
+                <WhatsAppText text={message.content.body} />
+              ) : (
+                `[${message.messageType}]`
+              )}
+            </p>
             {message.direction === "outbound" && <p className="mt-1 text-xs opacity-70">{message.status}</p>}
           </div>
         ))}

@@ -8,6 +8,7 @@ import { createMessageSendWorker } from "./processors/message-send";
 import { createAiAgentReplyWorker } from "./processors/ai-agent-reply";
 import { createHotmartWebhookWorker } from "./processors/hotmart-webhook";
 import { createFlowEngineWorker } from "./processors/flow-engine";
+import { createAppointmentReminderWorker } from "./processors/appointment-reminder";
 import { startWebhookEventsSweeper } from "./sweeper";
 
 async function main() {
@@ -24,6 +25,7 @@ async function main() {
   const aiAgentReplyWorker = createAiAgentReplyWorker(connection);
   const hotmartWebhookWorker = createHotmartWebhookWorker(connection);
   const flowEngineWorker = createFlowEngineWorker(connection);
+  const appointmentReminderWorker = createAppointmentReminderWorker(connection);
   const stopSweeper = startWebhookEventsSweeper(supabase, aiAgentReplyQueue, flowEngineQueue);
 
   webhookProcessingWorker.on("failed", (job, err) => {
@@ -47,9 +49,12 @@ async function main() {
   flowEngineWorker.on("failed", (job, err) => {
     console.error(`[worker] job ${job?.id} de flow-engine falló`, err);
   });
+  appointmentReminderWorker.on("failed", (job, err) => {
+    console.error(`[worker] job ${job?.id} de appointment-reminder falló`, err);
+  });
 
   console.log(
-    "[worker] listo: webhook-processing, contact-import, template-sync, campaign-dispatch, message-send, ai-agent-reply, hotmart-webhook, flow-engine y barrido de eventos pendientes",
+    "[worker] listo: webhook-processing, contact-import, template-sync, campaign-dispatch, message-send, ai-agent-reply, hotmart-webhook, flow-engine, appointment-reminder y barrido de eventos pendientes",
   );
 
   const shutdown = async () => {
@@ -68,6 +73,7 @@ async function main() {
       hotmartWebhookWorker.close(),
       flowEngineQueue.close(),
       flowEngineWorker.close(),
+      appointmentReminderWorker.close(),
     ]);
     await connection.quit();
     process.exit(0);

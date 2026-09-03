@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getContact, listCustomFieldDefinitions, listTags } from "@/lib/contacts/queries";
+import { formatContactName } from "@/lib/format";
 import { ContactNameForm } from "./contact-name-form";
 import { ConsentForm } from "./consent-form";
 import { TagsEditor } from "./tags-editor";
@@ -20,7 +21,7 @@ export default async function ContactDetailPage({
 
   return (
     <div className="flex flex-1 flex-col gap-8 p-8">
-      <h1 className="text-xl font-semibold">{contact.displayName ?? contact.waId}</h1>
+      <h1 className="text-xl font-semibold">{formatContactName(contact.displayName) ?? contact.waId}</h1>
       <p className="text-sm text-muted-foreground">{contact.waId}</p>
 
       <section className="flex flex-col gap-3 rounded-lg border p-4">
