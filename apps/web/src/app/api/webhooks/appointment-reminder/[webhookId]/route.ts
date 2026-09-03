@@ -14,6 +14,48 @@ import { enqueueAppointmentReminder } from "@/lib/queues/appointment-reminder";
  * propio CRM, no un proveedor externo con su propio formato), así que se
  * guarda tal cual y se encola.
  */
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, PATCH, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
+/** Asigna la plantilla desde afuera (panel de salon-pro), misma seguridad que el POST: el uuid en la URL. */
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
+  const { webhookId } = await params;
+
+  let body: { templateId?: string };
+  try {
+    body = (await request.json()) as { templateId?: string };
+  } catch {
+    return new NextResponse("Invalid JSON", { status: 400, headers: CORS_HEADERS });
+  }
+  if (!body.templateId) {
+    return new NextResponse("Falta templateId", { status: 400, headers: CORS_HEADERS });
+  }
+
+  const supabase = createAdminClient();
+  const { data: updated, error } = await supabase
+    .from("appointment_reminder_webhooks")
+    .update({ template_id: body.templateId })
+    .eq("id", webhookId)
+    .select("id, template_id")
+    .maybeSingle();
+
+  if (error) {
+    return new NextResponse("Internal Error", { status: 500, headers: CORS_HEADERS });
+  }
+  if (!updated) {
+    return new NextResponse("Not found", { status: 404, headers: CORS_HEADERS });
+  }
+
+  return NextResponse.json(updated, { headers: CORS_HEADERS });
+}
+
 export async function POST(request: NextRequest, { params }: { params: Promise<{ webhookId: string }> }) {
   const { webhookId } = await params;
 
