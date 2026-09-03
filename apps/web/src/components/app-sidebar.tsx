@@ -66,7 +66,7 @@ export function AppSidebar({
         <span className="flex h-7 w-7 items-center justify-center rounded-md bg-brand text-sm font-semibold text-brand-foreground">
           C
         </span>
-        <span className="text-sm font-semibold tracking-tight">app.charlia</span>
+        <span className="text-sm font-semibold tracking-tight">Chat CharlIA</span>
       </div>
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3">

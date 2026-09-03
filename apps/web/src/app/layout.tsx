@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "app.charlia",
+  title: "Chat CharlIA",
   description: "Plataforma interna de mensajería y campañas sobre WhatsApp Cloud API",
 };
 
