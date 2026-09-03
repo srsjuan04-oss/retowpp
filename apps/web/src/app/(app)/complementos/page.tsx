@@ -21,6 +21,17 @@ export default async function ComplementosPage() {
         </div>
         <span className="text-sm text-muted-foreground">→</span>
       </Link>
+
+      <Link
+        href="/complementos/appointment-reminders"
+        className="flex max-w-md items-center justify-between rounded-lg border p-4 hover:bg-accent"
+      >
+        <div>
+          <p className="font-medium">Recordatorios de cita (salon-pro)</p>
+          <p className="text-sm text-muted-foreground">Manda una plantilla al cliente cuando salon-pro dispara un recordatorio de cita.</p>
+        </div>
+        <span className="text-sm text-muted-foreground">→</span>
+      </Link>
     </div>
   );
 }
