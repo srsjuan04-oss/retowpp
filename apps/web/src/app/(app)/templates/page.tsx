@@ -1,7 +1,9 @@
 import { requireRole } from "@/lib/auth/dal";
+import { createClient } from "@/lib/supabase/server";
 import { listAllTemplates, type SyncedTemplate } from "@/lib/templates/queries";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { SyncTemplatesButton } from "./sync-button";
+import { CreateTemplateForm } from "./create-template-form";
 
 const STATUS_BADGE_VARIANTS: Record<string, BadgeProps["variant"]> = {
   approved: "success",
@@ -22,9 +24,12 @@ function groupByWaba(templates: SyncedTemplate[]): { wabaAccountId: string; waba
 }
 
 export default async function TemplatesPage() {
-  await requireRole("admin", "supervisor");
+  const session = await requireRole("admin", "supervisor");
   const templates = await listAllTemplates();
   const groups = groupByWaba(templates);
+
+  const supabase = await createClient();
+  const { data: wabaAccounts } = await supabase.from("waba_accounts").select("id, business_name").eq("is_active", true);
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-8">
@@ -34,8 +39,16 @@ export default async function TemplatesPage() {
       </header>
 
       <p className="text-sm text-muted-foreground">
-        Las plantillas se crean directamente en Meta Business Manager. Esta página solo refleja las que ya existen ahí.
+        Crea plantillas nuevas aquí o directamente en Meta Business Manager; en ambos casos quedan pendientes de revisión
+        hasta que Meta las apruebe.
       </p>
+
+      {session.role === "admin" && (
+        <section className="flex flex-col gap-3 rounded-lg border p-4">
+          <h2 className="text-sm font-medium">Crear plantilla nueva</h2>
+          <CreateTemplateForm wabaAccounts={wabaAccounts ?? []} />
+        </section>
+      )}
 
       {groups.map((group) => (
         <section key={group.wabaAccountId} className="flex flex-col gap-3">

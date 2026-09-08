@@ -1,5 +1,7 @@
 import { createHmac } from "node:crypto";
 import type {
+  CreateTemplateApiResponse,
+  CreateTemplateInput,
   MetaTemplateApiItem,
   SendMediaMessageInput,
   SendTemplateMessageInput,
@@ -122,6 +124,24 @@ export class WhatsAppClient {
       url = json.paging?.next ? this.withAppSecretProof(json.paging.next as string) : null;
     }
     return items;
+  }
+
+  /** Crea una plantilla en Meta (queda en estado PENDING hasta que Meta la revise). */
+  async createTemplate(wabaId: string, input: CreateTemplateInput): Promise<CreateTemplateApiResponse> {
+    const res = await this.fetchImpl(this.withAppSecretProof(`${this.baseUrl}/${wabaId}/message_templates`), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.config.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: input.name,
+        language: input.language,
+        category: input.category,
+        components: input.components,
+      }),
+    });
+    return this.parseJson(res) as Promise<CreateTemplateApiResponse>;
   }
 
   async getMediaUrl(mediaId: string): Promise<{ url: string; mimeType: string }> {

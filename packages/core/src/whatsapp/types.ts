@@ -42,6 +42,27 @@ export interface MetaTemplateApiItem {
   components: WhatsAppTemplateComponent[];
 }
 
+export interface CreateTemplateComponent {
+  type: "HEADER" | "BODY" | "FOOTER" | "BUTTONS";
+  format?: "TEXT";
+  text?: string;
+  example?: { header_text?: string[]; body_text?: string[][] };
+  buttons?: Array<{ type: "QUICK_REPLY" | "URL"; text: string; url?: string }>;
+}
+
+export interface CreateTemplateInput {
+  name: string;
+  language: string;
+  category: "MARKETING" | "UTILITY" | "AUTHENTICATION";
+  components: CreateTemplateComponent[];
+}
+
+export interface CreateTemplateApiResponse {
+  id: string;
+  status: string;
+  category: string;
+}
+
 /** Forma cruda del payload que Meta envía a POST /webhooks (antes de cualquier transformación) */
 export interface WhatsAppWebhookPayload {
   object: string;

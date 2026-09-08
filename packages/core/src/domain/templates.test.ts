@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { extractPlaceholderIndexes, renderTemplateComponents, type StoredTemplateComponent } from "./templates";
+import {
+  buildTemplateComponents,
+  extractPlaceholderIndexes,
+  renderTemplateComponents,
+  type StoredTemplateComponent,
+} from "./templates";
 
 describe("extractPlaceholderIndexes", () => {
   test("extrae índices únicos y ordenados", () => {
@@ -56,5 +61,71 @@ describe("renderTemplateComponents", () => {
     const { components: rendered, missingVariables } = renderTemplateComponents(noVarsComponents, {});
     expect(rendered).toEqual([]);
     expect(missingVariables).toEqual([]);
+  });
+});
+
+describe("buildTemplateComponents", () => {
+  test("arma header, body, footer y botones sin variables", () => {
+    const { components, error } = buildTemplateComponents({
+      headerText: "Recordatorio",
+      bodyText: "Tu cita es mañana.",
+      footerText: "Responde STOP para dejar de recibir avisos",
+      buttons: [{ type: "QUICK_REPLY", text: "Confirmar" }],
+    });
+
+    expect(error).toBeUndefined();
+    expect(components).toEqual([
+      { type: "HEADER", format: "TEXT", text: "Recordatorio" },
+      { type: "BODY", text: "Tu cita es mañana." },
+      { type: "FOOTER", text: "Responde STOP para dejar de recibir avisos" },
+      { type: "BUTTONS", buttons: [{ type: "QUICK_REPLY", text: "Confirmar" }] },
+    ]);
+  });
+
+  test("agrega example.body_text cuando el body tiene variables", () => {
+    const { components, error } = buildTemplateComponents({
+      bodyText: "Hola {{1}}, tu cita es el {{2}}.",
+      bodyExamples: ["Juan", "2026-07-27"],
+    });
+
+    expect(error).toBeUndefined();
+    expect(components).toEqual([
+      {
+        type: "BODY",
+        text: "Hola {{1}}, tu cita es el {{2}}.",
+        example: { body_text: [["Juan", "2026-07-27"]] },
+      },
+    ]);
+  });
+
+  test("rechaza cuando falta un ejemplo para alguna variable del body", () => {
+    const { components, error } = buildTemplateComponents({
+      bodyText: "Hola {{1}}, tu cita es el {{2}}.",
+      bodyExamples: ["Juan"],
+    });
+
+    expect(components).toEqual([]);
+    expect(error).toBe("Falta un ejemplo para cada variable del cuerpo.");
+  });
+
+  test("rechaza cuando falta un ejemplo para alguna variable del header", () => {
+    const { error } = buildTemplateComponents({
+      headerText: "Hola {{1}}",
+      bodyText: "Sin variables aquí.",
+    });
+
+    expect(error).toBe("Falta un ejemplo para cada variable del encabezado.");
+  });
+
+  test("botón URL conserva la url", () => {
+    const { components } = buildTemplateComponents({
+      bodyText: "Revisa tu pedido.",
+      buttons: [{ type: "URL", text: "Ver pedido", url: "https://example.com/pedido" }],
+    });
+
+    expect(components).toEqual([
+      { type: "BODY", text: "Revisa tu pedido." },
+      { type: "BUTTONS", buttons: [{ type: "URL", text: "Ver pedido", url: "https://example.com/pedido" }] },
+    ]);
   });
 });
