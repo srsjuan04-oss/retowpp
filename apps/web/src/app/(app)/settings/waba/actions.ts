@@ -138,10 +138,12 @@ export async function completeEmbeddedSignup(input: {
   const session = await requireRole("admin");
   if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
 
-  const appId = process.env.META_APP_ID;
+  // El App ID no es secreto (viaja en el bundle del cliente para FB.init), así que se
+  // reutiliza la misma variable pública en vez de pedir un META_APP_ID duplicado.
+  const appId = process.env.NEXT_PUBLIC_META_APP_ID;
   const appSecret = process.env.META_APP_SECRET;
   const encryptionKey = process.env.WABA_TOKEN_ENCRYPTION_KEY;
-  if (!appId || !appSecret) return { error: "Falta configurar META_APP_ID/META_APP_SECRET en el servidor." };
+  if (!appId || !appSecret) return { error: "Falta configurar NEXT_PUBLIC_META_APP_ID/META_APP_SECRET en el servidor." };
   if (!encryptionKey) return { error: "Falta configurar WABA_TOKEN_ENCRYPTION_KEY en el servidor." };
 
   const graphApiVersion = process.env.META_GRAPH_API_VERSION;
