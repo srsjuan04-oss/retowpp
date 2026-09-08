@@ -4,7 +4,6 @@
 // Los alias de abajo (UserRole, ConsentStatus, …) son azúcar sintáctico derivado
 // de `Database["public"]["Enums"]`, para no tener que escribir el path completo
 // en cada archivo consumidor.
-
 export type Json =
   | string
   | number
@@ -1182,6 +1181,7 @@ export type Database = {
           messaging_tier: string | null
           phone_number_id: string
           quality_rating: string | null
+          two_step_pin_encrypted: string | null
           waba_account_id: string
         }
         Insert: {
@@ -1194,6 +1194,7 @@ export type Database = {
           messaging_tier?: string | null
           phone_number_id: string
           quality_rating?: string | null
+          two_step_pin_encrypted?: string | null
           waba_account_id: string
         }
         Update: {
@@ -1206,6 +1207,7 @@ export type Database = {
           messaging_tier?: string | null
           phone_number_id?: string
           quality_rating?: string | null
+          two_step_pin_encrypted?: string | null
           waba_account_id?: string
         }
         Relationships: [

@@ -155,6 +155,50 @@ export class WhatsAppClient {
     return this.parseJson(res) as Promise<CreateTemplateApiResponse>;
   }
 
+  /** Registra el número para poder enviar/recibir por Cloud API (paso final de Embedded Signup). */
+  async registerPhoneNumber(phoneNumberId: string, pin: string): Promise<void> {
+    const res = await this.fetchImpl(this.withAppSecretProof(`${this.baseUrl}/${phoneNumberId}/register`), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.config.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ messaging_product: "whatsapp", pin }),
+    });
+    await this.parseJson(res);
+  }
+
+  /** Suscribe esta app a los webhooks de la WABA (paso final de Embedded Signup). */
+  async subscribeAppToWaba(wabaId: string): Promise<void> {
+    const res = await this.fetchImpl(this.withAppSecretProof(`${this.baseUrl}/${wabaId}/subscribed_apps`), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.config.accessToken}` },
+    });
+    await this.parseJson(res);
+  }
+
+  /** Nombre del negocio dueño de la WABA, para mostrarlo en la UI justo después de un Embedded Signup. */
+  async getWabaBusinessName(wabaId: string): Promise<string | null> {
+    const res = await this.fetchImpl(this.withAppSecretProof(`${this.baseUrl}/${wabaId}?fields=name`), {
+      headers: { Authorization: `Bearer ${this.config.accessToken}` },
+    });
+    const json = await this.parseJson(res);
+    return (json.name as string | undefined) ?? null;
+  }
+
+  /** Número visible y nombre verificado, para mostrarlos en la UI justo después de un Embedded Signup. */
+  async getPhoneNumberDisplayInfo(phoneNumberId: string): Promise<{ displayPhoneNumber: string; verifiedName: string | null }> {
+    const res = await this.fetchImpl(
+      this.withAppSecretProof(`${this.baseUrl}/${phoneNumberId}?fields=display_phone_number,verified_name`),
+      { headers: { Authorization: `Bearer ${this.config.accessToken}` } },
+    );
+    const json = await this.parseJson(res);
+    return {
+      displayPhoneNumber: json.display_phone_number as string,
+      verifiedName: (json.verified_name as string | undefined) ?? null,
+    };
+  }
+
   async getMediaUrl(mediaId: string): Promise<{ url: string; mimeType: string }> {
     const res = await this.fetchImpl(this.withAppSecretProof(`${this.baseUrl}/${mediaId}`), {
       headers: { Authorization: `Bearer ${this.config.accessToken}` },
@@ -191,4 +235,38 @@ export class WhatsAppClient {
     }
     return json;
   }
+}
+
+export interface ExchangeEmbeddedSignupCodeInput {
+  code: string;
+  appId: string;
+  appSecret: string;
+  graphApiVersion?: string;
+  fetchImpl?: typeof fetch;
+}
+
+/**
+ * Intercambia el código que devuelve Embedded Signup (Facebook Login for Business) por un
+ * access token de negocio (Business Integration System User), que por defecto no expira.
+ * A diferencia del resto del cliente, esta llamada no lleva el access token de una WABA
+ * (todavía no existe ninguna) — se autentica con client_id + client_secret de la app.
+ */
+export async function exchangeEmbeddedSignupCode(input: ExchangeEmbeddedSignupCodeInput): Promise<string> {
+  const version = input.graphApiVersion ?? "v21.0";
+  const url = new URL(`https://graph.facebook.com/${version}/oauth/access_token`);
+  url.searchParams.set("client_id", input.appId);
+  url.searchParams.set("client_secret", input.appSecret);
+  url.searchParams.set("code", input.code);
+  const fetchImpl = input.fetchImpl ?? fetch;
+
+  const res = await fetchImpl(url.toString());
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || typeof json.access_token !== "string") {
+    throw new WhatsAppApiError(
+      json?.error?.message ?? `Error intercambiando el código de Embedded Signup (${res.status})`,
+      res.status,
+      json?.error?.code,
+    );
+  }
+  return json.access_token;
 }

@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { ConnectWabaForm } from "./connect-waba-form";
 import { AddPhoneNumberForm } from "./add-phone-number-form";
+import { EmbeddedSignupButton } from "./embedded-signup-button";
 
 export default async function WabaSettingsPage() {
   const session = await requireRole("admin", "supervisor");
@@ -38,7 +39,24 @@ export default async function WabaSettingsPage() {
             <li className="text-muted-foreground">Aún no hay ninguna WABA conectada.</li>
           )}
         </ul>
-        {isAdmin && <ConnectWabaForm />}
+        {isAdmin && (
+          <div className="flex flex-col gap-4">
+            {process.env.NEXT_PUBLIC_META_APP_ID && process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID ? (
+              <EmbeddedSignupButton
+                appId={process.env.NEXT_PUBLIC_META_APP_ID}
+                configId={process.env.NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID}
+                graphApiVersion={process.env.NEXT_PUBLIC_META_GRAPH_API_VERSION ?? "v21.0"}
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Falta configurar NEXT_PUBLIC_META_APP_ID y NEXT_PUBLIC_META_EMBEDDED_SIGNUP_CONFIG_ID para habilitar
+                &quot;Conectar con Facebook&quot; (Embedded Signup).
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">O conecta una WABA a mano:</p>
+            <ConnectWabaForm />
+          </div>
+        )}
       </section>
 
       <section className="flex flex-col gap-4 rounded-lg border p-4">
