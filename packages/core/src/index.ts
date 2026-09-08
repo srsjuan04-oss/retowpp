@@ -5,6 +5,7 @@ export * from "./domain/window";
 export * from "./domain/consent";
 export * from "./domain/idempotency";
 export * from "./domain/templates";
+export * from "./domain/bsuid";
 export * from "./domain/message-status";
 export * from "./domain/phone";
 export * from "./domain/campaign-variables";

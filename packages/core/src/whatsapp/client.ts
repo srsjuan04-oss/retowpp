@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto";
+import { isBusinessScopedUserId } from "../domain/bsuid";
 import type {
   CreateTemplateApiResponse,
   CreateTemplateInput,
@@ -71,10 +72,20 @@ export class WhatsAppClient {
     return withProof.toString();
   }
 
+  /**
+   * `to` solo acepta un número de teléfono (wa_id); un contacto que escribió sin compartir el
+   * suyo solo tiene un BSUID (ver domain/bsuid.ts), y ese va por `recipient` + recipient_type.
+   * Mandar un BSUID por `to` no da error: la API lo acepta pero el mensaje nunca se entrega
+   * (status "failed" / 131026 "Message undeliverable").
+   */
+  private recipientFields(to: string): { to: string } | { recipient_type: "individual"; recipient: string } {
+    return isBusinessScopedUserId(to) ? { recipient_type: "individual", recipient: to } : { to };
+  }
+
   async sendTemplateMessage(input: SendTemplateMessageInput): Promise<WhatsAppSendResponse> {
     return this.post(`/${this.requirePhoneNumberId()}/messages`, {
       messaging_product: "whatsapp",
-      to: input.to,
+      ...this.recipientFields(input.to),
       type: "template",
       template: {
         name: input.templateName,
@@ -87,7 +98,7 @@ export class WhatsAppClient {
   async sendTextMessage(input: SendTextMessageInput): Promise<WhatsAppSendResponse> {
     return this.post(`/${this.requirePhoneNumberId()}/messages`, {
       messaging_product: "whatsapp",
-      to: input.to,
+      ...this.recipientFields(input.to),
       type: "text",
       text: { body: input.body, preview_url: input.previewUrl ?? false },
       ...(input.contextMessageId ? { context: { message_id: input.contextMessageId } } : {}),
@@ -98,7 +109,7 @@ export class WhatsAppClient {
   async sendMediaMessage(input: SendMediaMessageInput): Promise<WhatsAppSendResponse> {
     return this.post(`/${this.requirePhoneNumberId()}/messages`, {
       messaging_product: "whatsapp",
-      to: input.to,
+      ...this.recipientFields(input.to),
       type: input.type,
       [input.type]: { link: input.link },
     });
