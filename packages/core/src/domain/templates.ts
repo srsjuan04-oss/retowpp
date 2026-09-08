@@ -64,6 +64,20 @@ export function renderTemplateComponents(
   return { components, missingVariables: [...new Set(missingVariables)] };
 }
 
+/**
+ * Texto legible de una plantilla ya enviada, con las variables sustituidas — para mostrar en
+ * el inbox en vez de un genérico "[template]". Solo el body (lo que de verdad lee el
+ * contacto); header/footer/botones no se representan en una burbuja de texto plano.
+ */
+export function renderTemplateBodyText(
+  storedComponents: StoredTemplateComponent[],
+  variableValues: Record<string, string>,
+): string {
+  const body = storedComponents.find((c) => c.type === "BODY");
+  if (!body?.text) return "";
+  return body.text.replace(PLACEHOLDER_RE, (match, index: string) => variableValues[index] ?? match);
+}
+
 /** Nombre de plantilla exigido por Meta: solo minúsculas, dígitos y guion bajo. */
 export const TEMPLATE_NAME_RE = /^[a-z0-9_]+$/;
 

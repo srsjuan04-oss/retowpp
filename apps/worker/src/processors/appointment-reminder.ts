@@ -4,6 +4,7 @@ import {
   APPOINTMENT_REMINDER_QUEUE,
   WhatsAppApiError,
   normalizeWaId,
+  renderTemplateBodyText,
   renderTemplateComponents,
   resolveAppointmentReminderVariables,
   type AppointmentReminderPayload,
@@ -110,7 +111,11 @@ export async function processAppointmentReminderEvent(supabase: Client, eventId:
         direction: "outbound",
         sender_type: "system",
         message_type: "template",
-        content: { templateName: template.name, variables },
+        content: {
+          templateName: template.name,
+          variables,
+          body: renderTemplateBodyText(template.components as unknown as StoredTemplateComponent[], variables),
+        },
         status: "sent",
       })
       .select("id")

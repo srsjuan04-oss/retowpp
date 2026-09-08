@@ -96,7 +96,7 @@ export function ConversationThread({
             )}
           >
             <p className="whitespace-pre-wrap">
-              {message.messageType === "text" && typeof message.content.body === "string" ? (
+              {typeof message.content.body === "string" ? (
                 <WhatsAppText text={message.content.body} />
               ) : (
                 `[${message.messageType}]`

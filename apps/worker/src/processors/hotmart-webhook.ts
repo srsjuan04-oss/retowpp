@@ -5,6 +5,7 @@ import {
   WhatsAppApiError,
   extractHotmartPurchaseData,
   normalizeWaId,
+  renderTemplateBodyText,
   renderTemplateComponents,
   resolveHotmartVariables,
   type HotmartWebhookPayload,
@@ -108,7 +109,11 @@ export async function processHotmartWebhookEvent(supabase: Client, eventId: stri
         direction: "outbound",
         sender_type: "hotmart",
         message_type: "template",
-        content: { templateName: template.name, variables },
+        content: {
+          templateName: template.name,
+          variables,
+          body: renderTemplateBodyText(template.components as unknown as StoredTemplateComponent[], variables),
+        },
         status: "sent",
       })
       .select("id")

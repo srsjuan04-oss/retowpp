@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildTemplateComponents,
   extractPlaceholderIndexes,
+  renderTemplateBodyText,
   renderTemplateComponents,
   type StoredTemplateComponent,
 } from "./templates";
@@ -127,5 +128,25 @@ describe("buildTemplateComponents", () => {
       { type: "BODY", text: "Revisa tu pedido." },
       { type: "BUTTONS", buttons: [{ type: "URL", text: "Ver pedido", url: "https://example.com/pedido" }] },
     ]);
+  });
+});
+
+describe("renderTemplateBodyText", () => {
+  const components: StoredTemplateComponent[] = [
+    { type: "HEADER", format: "TEXT", text: "Recordatorio" },
+    { type: "BODY", text: "Hola {{1}}, tu cita es el {{2}}." },
+    { type: "FOOTER", text: "Gracias por tu compra" },
+  ];
+
+  test("sustituye las variables del body", () => {
+    expect(renderTemplateBodyText(components, { "1": "Juan", "2": "mañana" })).toBe("Hola Juan, tu cita es el mañana.");
+  });
+
+  test("deja el placeholder literal si falta la variable", () => {
+    expect(renderTemplateBodyText(components, { "1": "Juan" })).toBe("Hola Juan, tu cita es el {{2}}.");
+  });
+
+  test("arreglo vacío si no hay componente BODY", () => {
+    expect(renderTemplateBodyText([{ type: "FOOTER", text: "Solo pie" }], {})).toBe("");
   });
 });

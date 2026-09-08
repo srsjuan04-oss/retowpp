@@ -32,7 +32,7 @@ function computeIsUnread(lastInboundAt: string | null, lastReadAt: string | null
 const PREVIEW_MAX_LENGTH = 60;
 
 function derivePreview(messageType: string, content: Record<string, unknown> | null): string {
-  if (messageType === "text" && typeof content?.body === "string") {
+  if (typeof content?.body === "string" && content.body.trim()) {
     const body = content.body.trim();
     return body.length > PREVIEW_MAX_LENGTH ? `${body.slice(0, PREVIEW_MAX_LENGTH)}…` : body;
   }

@@ -4,6 +4,7 @@ import {
   MESSAGE_SEND_QUEUE,
   WhatsAppApiError,
   assertCanContact,
+  renderTemplateBodyText,
   renderTemplateComponents,
   type StoredTemplateComponent,
 } from "@reto-whatsapp/core";
@@ -114,7 +115,14 @@ export async function processMessageSend(supabase: Client, campaignId: string, c
         direction: "outbound",
         sender_type: "campaign",
         message_type: "template",
-        content: { templateName: template.name, variables: recipient.variables },
+        content: {
+          templateName: template.name,
+          variables: recipient.variables,
+          body: renderTemplateBodyText(
+            template.components as unknown as StoredTemplateComponent[],
+            recipient.variables as Record<string, string>,
+          ),
+        },
         status: "sent",
       })
       .select("id")

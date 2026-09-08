@@ -2,7 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import * as z from "zod";
-import { assertCanContact, assertCanSendOutbound, renderTemplateComponents, type StoredTemplateComponent } from "@reto-whatsapp/core";
+import {
+  assertCanContact,
+  assertCanSendOutbound,
+  renderTemplateBodyText,
+  renderTemplateComponents,
+  type StoredTemplateComponent,
+} from "@reto-whatsapp/core";
 import { verifySession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getWhatsAppClientForPhoneNumber } from "@/lib/whatsapp/get-client-for-phone-number";
@@ -189,7 +195,11 @@ export async function sendTemplateMessage(
       sender_type: "agent",
       sender_id: session.id,
       message_type: "template",
-      content: { templateName: template.name, variables },
+      content: {
+        templateName: template.name,
+        variables,
+        body: renderTemplateBodyText(template.components as unknown as StoredTemplateComponent[], variables),
+      },
       status: "sent",
       client_dedupe_key: parsed.data.clientDedupeKey,
     });
