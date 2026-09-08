@@ -27,22 +27,43 @@ export function ConversationList({ initialConversations }: { initialConversation
 
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
-      .channel("inbox-realtime")
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, (payload) => {
-        console.log("[inbox-realtime] conversations change", payload);
-        router.refresh();
-      })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
-        console.log("[inbox-realtime] messages insert", payload);
-        router.refresh();
-      })
-      .subscribe((status, err) => {
-        console.log("[inbox-realtime] subscribe status", status, err);
-      });
+    let channel: ReturnType<typeof supabase.channel> | undefined;
+
+    // El cliente de @supabase/ssr hidrata la sesión desde las cookies, pero no propaga
+    // ese JWT al websocket de Realtime por su cuenta: sin este setAuth, la conexión queda
+    // autenticada como "anon" (confirmado en realtime.subscription: claims_role = anon) y
+    // las políticas RLS de conversations/messages, que dependen de auth.uid(), descartan
+    // todos los eventos en silencio — el canal se suscribe bien, pero nunca llega nada.
+    void (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) await supabase.realtime.setAuth(session.access_token);
+
+      channel = supabase
+        .channel("inbox-realtime")
+        .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, (payload) => {
+          console.log("[inbox-realtime] conversations change", payload);
+          router.refresh();
+        })
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload) => {
+          console.log("[inbox-realtime] messages insert", payload);
+          router.refresh();
+        })
+        .subscribe((status, err) => {
+          console.log("[inbox-realtime] subscribe status", status, err);
+        });
+    })();
+
+    // El access token rota mientras la pestaña de bandeja queda abierta muchas horas;
+    // sin refrescarlo acá, Realtime desconecta al vencer el token viejo.
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session) void supabase.realtime.setAuth(session.access_token);
+    });
 
     return () => {
-      void supabase.removeChannel(channel);
+      authListener.subscription.unsubscribe();
+      if (channel) void supabase.removeChannel(channel);
     };
   }, [router]);
 
