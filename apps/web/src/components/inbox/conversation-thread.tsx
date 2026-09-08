@@ -1,10 +1,12 @@
 "use client";
 
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { isWithinServiceWindow } from "@reto-whatsapp/core";
 import {
   assignConversation,
   closeConversation,
+  deleteConversation,
   markConversationRead,
   sendMessage,
   type SendMessageState,
@@ -31,15 +33,19 @@ export function ConversationThread({
   initialMessages,
   profiles,
   templates,
+  canDelete,
 }: {
   conversation: ConversationDetail;
   initialMessages: MessageItem[];
   profiles: AssignableProfile[];
   templates: TemplateOption[];
+  canDelete: boolean;
 }) {
   const [state, formAction, pending] = useActionState(sendMessage, initialState);
   const withinWindow = isWithinServiceWindow(conversation.lastInboundAt);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const [deleting, startDeleteTransition] = useTransition();
 
   useEffect(() => {
     void markConversationRead(conversation.id);
@@ -79,6 +85,25 @@ export function ConversationThread({
           {conversation.status !== "closed" && (
             <Button variant="outline" size="sm" onClick={() => void closeConversation(conversation.id)}>
               Cerrar
+            </Button>
+          )}
+          {canDelete && (
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={deleting}
+              onClick={() => {
+                if (!window.confirm("¿Eliminar esta conversación? Se borran también todos sus mensajes, sin poder deshacerlo.")) {
+                  return;
+                }
+                startDeleteTransition(async () => {
+                  await deleteConversation(conversation.id);
+                  router.push("/inbox");
+                  router.refresh();
+                });
+              }}
+            >
+              {deleting ? "Eliminando…" : "Eliminar"}
             </Button>
           )}
         </div>

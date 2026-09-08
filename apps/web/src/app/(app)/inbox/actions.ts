@@ -9,7 +9,7 @@ import {
   renderTemplateComponents,
   type StoredTemplateComponent,
 } from "@reto-whatsapp/core";
-import { verifySession } from "@/lib/auth/dal";
+import { requireRole, verifySession } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { getWhatsAppClientForPhoneNumber } from "@/lib/whatsapp/get-client-for-phone-number";
 
@@ -234,6 +234,19 @@ export async function closeConversation(conversationId: string): Promise<void> {
   if (error) throw error;
   revalidatePath("/inbox");
   revalidatePath(`/inbox/${conversationId}`);
+}
+
+/**
+ * Borrado permanente (no hay soft-delete): se lleva la conversación y, en cascada, todos sus
+ * mensajes (messages/flow_runs referencian conversations con "on delete cascade"). Restringido
+ * a admin/supervisor por la policy `conversations_delete`, no solo por este chequeo de rol.
+ */
+export async function deleteConversation(conversationId: string): Promise<void> {
+  await requireRole("admin", "supervisor");
+  const supabase = await createClient();
+  const { error } = await supabase.from("conversations").delete().eq("id", conversationId);
+  if (error) throw error;
+  revalidatePath("/inbox");
 }
 
 /** Marca como leído al abrir el hilo (módulo bandeja): sin lectura por-agente, un timestamp global alcanza. */
