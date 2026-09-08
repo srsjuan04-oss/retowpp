@@ -77,10 +77,16 @@ async function processInboundMessages(
   const phoneNumberRow = await findPhoneNumberRow(supabase, metaPhoneNumberId);
   const phoneNumberRowId = phoneNumberRow.id;
   const companyId = phoneNumberRow.company_id;
-  const profileByWaId = new Map((value.contacts ?? []).map((c) => [c.wa_id, c.profile?.name]));
+  const profileByWaId = new Map((value.contacts ?? []).map((c) => [c.wa_id ?? c.user_id, c.profile?.name]));
 
   for (const raw of value.messages ?? []) {
-    const contactId = await findOrCreateContact(supabase, raw.from, companyId, profileByWaId.get(raw.from));
+    // Contacto que escribió por username sin exponer teléfono: Meta solo manda
+    // from_user_id ("CO.<dígitos>"), que se usa igual como identidad (se puede
+    // responder a ese mismo valor por `to` en el envío).
+    const waId = raw.from ?? raw.from_user_id;
+    if (!waId) continue; // Sin ningún identificador no hay forma de crear el contacto ni de responderle.
+
+    const contactId = await findOrCreateContact(supabase, waId, companyId, profileByWaId.get(waId));
     const conversationId = await findOrCreateConversation(supabase, contactId, phoneNumberRowId, companyId);
 
     const messageType = mapInboundMessageType(raw.type);
@@ -207,7 +213,15 @@ export async function processWebhookEvent(
       .update({ processed_at: new Date().toISOString(), processing_error: null })
       .eq("id", webhookEventId);
   } catch (processingError) {
-    const message = processingError instanceof Error ? processingError.message : String(processingError);
+    // Los errores de Postgrest (ej. violación de not-null) no son `instanceof Error`:
+    // son objetos planos con `.message`. Sin este chequeo, String(objeto) guarda
+    // literalmente "[object Object]" y se pierde la causa real del fallo.
+    const message =
+      processingError instanceof Error
+        ? processingError.message
+        : processingError && typeof processingError === "object" && "message" in processingError
+          ? String((processingError as { message: unknown }).message)
+          : JSON.stringify(processingError);
     await supabase
       .from("webhook_events")
       .update({ processing_error: message, retry_count: event.retry_count + 1 })

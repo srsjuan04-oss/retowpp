@@ -73,10 +73,15 @@ export interface WhatsAppWebhookPayload {
       value: {
         messaging_product: "whatsapp";
         metadata: { display_phone_number: string; phone_number_id: string };
-        contacts?: Array<{ profile: { name: string }; wa_id: string }>;
+        // wa_id/from son el número de teléfono de siempre; cuando el contacto escribe desde
+        // un identificador de usuario (mensajería por username, sin exponer el teléfono),
+        // Meta solo manda user_id/from_user_id (formato "CO.<dígitos>"), que se usa como
+        // identidad de reemplazo tanto para crear el contacto como para responderle.
+        contacts?: Array<{ profile: { name: string }; wa_id?: string; user_id?: string }>;
         messages?: Array<{
           id: string;
-          from: string;
+          from?: string;
+          from_user_id?: string;
           timestamp: string;
           type: string;
           text?: { body: string };
