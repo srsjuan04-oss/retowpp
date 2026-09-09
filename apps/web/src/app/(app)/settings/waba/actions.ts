@@ -3,7 +3,7 @@
 import { randomInt } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import * as z from "zod";
-import { WhatsAppClient, encryptWabaToken, exchangeEmbeddedSignupCode } from "@reto-whatsapp/core";
+import { WhatsAppClient, decryptWabaToken, encryptWabaToken, exchangeEmbeddedSignupCode } from "@reto-whatsapp/core";
 import { requireRole } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -163,14 +163,24 @@ export async function completeEmbeddedSignup(input: {
       client.getPhoneNumberDisplayInfo(input.phoneNumberId),
     ]);
 
-    // PIN de verificación en dos pasos: el número llega sin ninguno configurado, y Meta exige
-    // mandar uno (existente o nuevo) para registrarlo. Se genera y se guarda cifrado.
-    const pin = randomInt(0, 1_000_000).toString().padStart(6, "0");
-    await client.registerPhoneNumber(input.phoneNumberId, pin);
-    await client.subscribeAppToWaba(input.wabaId);
-
     const supabase = createAdminClient();
     const encryptedToken = encryptWabaToken(accessToken, encryptionKey);
+
+    // PIN de verificación en dos pasos: si el número ya se había registrado antes (reconectar,
+    // reintentar tras un error), Meta ya le tiene un PIN asignado y exige mandar ESE mismo, no
+    // uno nuevo — mandar otro distinto responde 133005 "Two step verification PIN Mismatch".
+    // Solo se genera uno nuevo la primera vez que vemos este phone_number_id.
+    const { data: phoneWithPin } = await supabase
+      .from("phone_numbers")
+      .select("two_step_pin_encrypted")
+      .eq("phone_number_id", input.phoneNumberId)
+      .maybeSingle();
+    const pin = phoneWithPin?.two_step_pin_encrypted
+      ? decryptWabaToken(phoneWithPin.two_step_pin_encrypted, encryptionKey)
+      : randomInt(0, 1_000_000).toString().padStart(6, "0");
+
+    await client.registerPhoneNumber(input.phoneNumberId, pin);
+    await client.subscribeAppToWaba(input.wabaId);
 
     const { data: existingWaba, error: existingWabaError } = await supabase
       .from("waba_accounts")
