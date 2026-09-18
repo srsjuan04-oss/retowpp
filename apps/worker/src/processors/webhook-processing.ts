@@ -57,7 +57,7 @@ async function findOrCreateContact(supabase: Client, waId: string, companyId: st
 async function findPhoneNumberRow(supabase: Client, metaPhoneNumberId: string) {
   const { data } = await supabase
     .from("phone_numbers")
-    .select("id, company_id")
+    .select("id, company_id, ai_agent_enabled")
     .eq("phone_number_id", metaPhoneNumberId)
     .maybeSingle();
   if (!data) {
@@ -135,11 +135,16 @@ async function processInboundMessages(
     // Solo se dispara ante un inbound nuevo de verdad (no en un reintento del mismo
     // webhook, que con ignoreDuplicates no inserta nada).
     if (insertedMessage && insertedMessage.length > 0 && messageType === "text") {
-      await aiAgentReplyQueue.add(
-        "reply",
-        { conversationId },
-        { jobId: `ai-agent-reply|${raw.id}`, attempts: 2, backoff: { type: "exponential", delay: 5000 } },
-      );
+      // ai_agent_enabled es el interruptor por número (además del general de la empresa en
+      // ai_agent_settings, que sigue revisando el propio worker de ai-agent-reply): permite
+      // pausar el bot en un número puntual sin tocar los demás ni el resto del procesamiento.
+      if (phoneNumberRow.ai_agent_enabled) {
+        await aiAgentReplyQueue.add(
+          "reply",
+          { conversationId },
+          { jobId: `ai-agent-reply|${raw.id}`, attempts: 2, backoff: { type: "exponential", delay: 5000 } },
+        );
+      }
       await flowEngineQueue.add(
         "advance",
         { conversationId },

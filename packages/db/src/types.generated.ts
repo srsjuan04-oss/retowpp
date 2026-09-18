@@ -1172,6 +1172,7 @@ export type Database = {
       }
       phone_numbers: {
         Row: {
+          ai_agent_enabled: boolean
           company_id: string
           created_at: string
           display_phone_number: string
@@ -1185,6 +1186,7 @@ export type Database = {
           waba_account_id: string
         }
         Insert: {
+          ai_agent_enabled?: boolean
           company_id: string
           created_at?: string
           display_phone_number: string
@@ -1198,6 +1200,7 @@ export type Database = {
           waba_account_id: string
         }
         Update: {
+          ai_agent_enabled?: boolean
           company_id?: string
           created_at?: string
           display_phone_number?: string

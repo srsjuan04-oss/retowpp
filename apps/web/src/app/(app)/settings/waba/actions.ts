@@ -119,6 +119,42 @@ export async function addPhoneNumber(
   return { success: true };
 }
 
+export interface SetPhoneNumberAiAgentEnabledState {
+  error?: string;
+  success?: boolean;
+}
+
+/**
+ * Prende/apaga el Agente de IA solo para este número (además del interruptor general de la
+ * empresa en /settings/ai, que sigue aplicando a todos). Útil para pausar el bot en un número
+ * puntual —por ejemplo uno personal de prueba— sin afectar el resto ni dejar de recibir/enviar
+ * mensajes por ese número.
+ */
+export async function setPhoneNumberAiAgentEnabled(
+  phoneNumberId: string,
+  enabled: boolean,
+): Promise<SetPhoneNumberAiAgentEnabledState> {
+  const session = await requireRole("admin");
+  if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
+
+  const supabase = createAdminClient();
+  const { data: phoneNumber, error: phoneError } = await supabase
+    .from("phone_numbers")
+    .select("company_id")
+    .eq("id", phoneNumberId)
+    .maybeSingle();
+  if (phoneError) return { error: phoneError.message };
+  if (!phoneNumber || phoneNumber.company_id !== session.companyId) {
+    return { error: "Ese número no pertenece a tu empresa." };
+  }
+
+  const { error } = await supabase.from("phone_numbers").update({ ai_agent_enabled: enabled }).eq("id", phoneNumberId);
+  if (error) return { error: error.message };
+
+  revalidatePath("/settings/waba");
+  return { success: true };
+}
+
 export interface CompleteEmbeddedSignupState {
   error?: string;
   success?: boolean;

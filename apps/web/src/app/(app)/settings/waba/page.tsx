@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ConnectWabaForm } from "./connect-waba-form";
 import { AddPhoneNumberForm } from "./add-phone-number-form";
 import { EmbeddedSignupButton } from "./embedded-signup-button";
+import { PhoneNumberList } from "./phone-number-list";
 
 export default async function WabaSettingsPage() {
   const session = await requireRole("admin", "supervisor");
@@ -15,7 +16,7 @@ export default async function WabaSettingsPage() {
 
   const { data: phoneNumbers } = await supabase
     .from("phone_numbers")
-    .select("id, waba_account_id, phone_number_id, display_phone_number, label, is_active")
+    .select("id, waba_account_id, phone_number_id, display_phone_number, label, is_active, ai_agent_enabled")
     .order("created_at", { ascending: false });
 
   const isAdmin = session.role === "admin";
@@ -62,19 +63,7 @@ export default async function WabaSettingsPage() {
       <section className="flex flex-col gap-4 rounded-lg border p-4">
         <h2 className="font-medium">Phone Number IDs</h2>
         <ul className="flex flex-col gap-2 text-sm">
-          {(phoneNumbers ?? []).map((phone) => (
-            <li key={phone.id} className="flex items-center justify-between rounded-md border px-3 py-2">
-              <span>
-                {phone.display_phone_number}
-                {phone.label ? ` · ${phone.label}` : ""}{" "}
-                <span className="text-muted-foreground">({phone.phone_number_id})</span>
-              </span>
-              <span className="text-muted-foreground">{phone.is_active ? "Activo" : "Inactivo"}</span>
-            </li>
-          ))}
-          {(phoneNumbers ?? []).length === 0 && (
-            <li className="text-muted-foreground">Aún no hay números registrados.</li>
-          )}
+          <PhoneNumberList phoneNumbers={phoneNumbers ?? []} canToggle={isAdmin} />
         </ul>
         {isAdmin && <AddPhoneNumberForm wabaAccounts={wabaAccounts ?? []} />}
       </section>

@@ -75,6 +75,16 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
   if (settingsError) throw settingsError;
   if (!settings || !settings.is_enabled) return;
 
+  // Interruptor por número (además del general de la empresa arriba): permite pausar el bot
+  // en un número puntual —p. ej. uno personal de prueba— sin afectar los demás.
+  const { data: phoneNumber, error: phoneNumberError } = await supabase
+    .from("phone_numbers")
+    .select("ai_agent_enabled")
+    .eq("id", conversation.phone_number_id)
+    .single();
+  if (phoneNumberError) throw phoneNumberError;
+  if (!phoneNumber.ai_agent_enabled) return;
+
   const { data: contact, error: contactError } = await supabase
     .from("contacts")
     .select("wa_id, consent_status")
