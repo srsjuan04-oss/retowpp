@@ -14,7 +14,7 @@ interface FBLoginOptions {
   config_id: string;
   response_type: "code";
   override_default_response_type: true;
-  extras: { setup: Record<string, unknown> };
+  extras: { setup: Record<string, unknown>; featureType: string; sessionInfoVersion: string };
 }
 
 declare global {
@@ -34,6 +34,10 @@ type SignupStatus = "idle" | "waiting" | "processing" | "error" | "success";
  * separado y en cualquier orden: FB.login() devuelve un `code` de un solo uso (30s de vida),
  * y un postMessage WA_EMBEDDED_SIGNUP manda el waba_id/phone_number_id — solo se puede llamar
  * al servidor cuando se tienen ambos.
+ *
+ * featureType: "whatsapp_business_app_onboarding" habilita el paso de migración que Meta
+ * muestra cuando el número que el cliente ingresa ya tiene la app de WhatsApp Business (móvil)
+ * activa; si el número no la tiene, el flujo normal de signup sigue igual.
  */
 export function EmbeddedSignupButton({
   appId,
@@ -127,7 +131,7 @@ export function EmbeddedSignupButton({
         config_id: configId,
         response_type: "code",
         override_default_response_type: true,
-        extras: { setup: {} },
+        extras: { setup: {}, featureType: "whatsapp_business_app_onboarding", sessionInfoVersion: "3" },
       },
     );
   };
