@@ -14,10 +14,11 @@ export default async function WabaSettingsPage() {
     .select("id, waba_id, business_name, is_active, created_at")
     .order("created_at", { ascending: false });
 
-  const { data: phoneNumbers } = await supabase
+  const { data: phoneNumbers, error: phoneNumbersError } = await supabase
     .from("phone_numbers")
     .select("id, waba_account_id, phone_number_id, display_phone_number, label, is_active, ai_agent_enabled")
     .order("created_at", { ascending: false });
+  if (phoneNumbersError) console.error("[settings/waba] phoneNumbers query error:", phoneNumbersError);
 
   const isAdmin = session.role === "admin";
 
