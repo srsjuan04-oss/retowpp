@@ -168,6 +168,24 @@ export class WhatsAppClient {
     await this.parseJson(res);
   }
 
+  /**
+   * Pide a Meta que reenvíe por webhook el historial (180 días) o los contactos guardados en
+   * la app de WhatsApp Business, tras una migración vía Embedded Signup (onboarding de
+   * usuarios de la app). En un número que nunca tuvo la app, Meta responde error — se llama
+   * como best-effort (ver completeEmbeddedSignup) y no debe romper el resto del alta.
+   */
+  async requestSmbAppDataSync(phoneNumberId: string, syncType: "history" | "smb_app_state_sync"): Promise<void> {
+    const res = await this.fetchImpl(this.withAppSecretProof(`${this.baseUrl}/${phoneNumberId}/smb_app_data`), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.config.accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ messaging_product: "whatsapp", sync_type: syncType }),
+    });
+    await this.parseJson(res);
+  }
+
   /** Suscribe esta app a los webhooks de la WABA (paso final de Embedded Signup). */
   async subscribeAppToWaba(wabaId: string): Promise<void> {
     const res = await this.fetchImpl(this.withAppSecretProof(`${this.baseUrl}/${wabaId}/subscribed_apps`), {

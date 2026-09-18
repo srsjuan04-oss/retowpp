@@ -182,6 +182,15 @@ export async function completeEmbeddedSignup(input: {
     await client.registerPhoneNumber(input.phoneNumberId, pin);
     await client.subscribeAppToWaba(input.wabaId);
 
+    // Best-effort: si el número venía de la app de WhatsApp Business (migración), esto dispara
+    // el reenvío del historial (180 días) y los contactos por webhook (history/smb_app_state_sync,
+    // procesados en el worker). En un número nuevo sin la app, Meta responde error — se ignora
+    // sin romper el resto del alta.
+    await Promise.allSettled([
+      client.requestSmbAppDataSync(input.phoneNumberId, "history"),
+      client.requestSmbAppDataSync(input.phoneNumberId, "smb_app_state_sync"),
+    ]);
+
     const { data: existingWaba, error: existingWabaError } = await supabase
       .from("waba_accounts")
       .select("id, company_id")

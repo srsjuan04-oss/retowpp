@@ -5,6 +5,7 @@ import {
   FLOW_ENGINE_QUEUE,
   buildMessageStatusDedupeKey,
   isForwardStatusTransition,
+  normalizeWaId,
   WEBHOOK_PROCESSING_QUEUE,
   type MessageStatus,
   type WhatsAppWebhookPayload,
@@ -186,6 +187,170 @@ async function processStatusEvents(
   }
 }
 
+/** Payload de onboarding de usuarios de la app de WhatsApp Business (migración): ver
+ * https://developers.facebook.com/documentation/business-messaging/whatsapp/embedded-signup/onboarding-business-app-users */
+interface HistoryChangeValue {
+  metadata?: { display_phone_number: string; phone_number_id: string };
+  history?: Array<{
+    threads?: Array<{
+      id: string;
+      messages?: Array<{
+        from: string;
+        to: string;
+        id: string;
+        timestamp: string;
+        type: string;
+        history_context?: { status?: string };
+        [key: string]: unknown;
+      }>;
+    }>;
+  }>;
+}
+
+interface SmbAppStateSyncChangeValue {
+  metadata?: { phone_number_id: string };
+  state_sync?: Array<{
+    type: string;
+    action: "add" | "remove";
+    contact?: { full_name?: string; first_name?: string; phone_number?: string };
+  }>;
+}
+
+interface MessageEchoesChangeValue {
+  metadata?: { phone_number_id: string };
+  message_echoes?: Array<{
+    from: string;
+    to: string;
+    id: string;
+    timestamp: string;
+    type: string;
+    [key: string]: unknown;
+  }>;
+}
+
+const HISTORY_STATUS_MAP: Record<string, Database["public"]["Enums"]["message_status"]> = {
+  sent: "sent",
+  delivered: "delivered",
+  read: "read",
+  failed: "failed",
+};
+
+/** Trae el historial (hasta 180 días, en chunks) que Meta reenvía tras habilitar la migración
+ * de la app de WhatsApp Business. No dispara IA/flujos: son mensajes viejos, no un inbound nuevo. */
+async function processHistorySync(supabase: Client, value: HistoryChangeValue) {
+  const metaPhoneNumberId = value.metadata?.phone_number_id;
+  if (!metaPhoneNumberId) return; // Payload de "history declined" (sync desactivado desde la app): no hay nada que traer.
+  const phoneNumberRow = await findPhoneNumberRow(supabase, metaPhoneNumberId);
+  const businessWaId = normalizeWaId(value.metadata?.display_phone_number ?? "");
+
+  for (const chunk of value.history ?? []) {
+    for (const thread of chunk.threads ?? []) {
+      const customerWaId = normalizeWaId(thread.id);
+      if (!customerWaId) continue;
+      const contactId = await findOrCreateContact(supabase, customerWaId, phoneNumberRow.company_id, undefined);
+      const conversationId = await findOrCreateConversation(supabase, contactId, phoneNumberRow.id, phoneNumberRow.company_id);
+
+      for (const raw of thread.messages ?? []) {
+        const direction: Database["public"]["Enums"]["message_direction"] =
+          normalizeWaId(raw.from) === businessWaId ? "outbound" : "inbound";
+        const messageType = mapInboundMessageType(raw.type);
+        const mediaId = MEDIA_MESSAGE_TYPES.has(raw.type) ? ((raw[raw.type] as { id?: string })?.id ?? null) : null;
+        const content = (raw[raw.type] as Record<string, unknown>) ?? {};
+        const occurredAt = new Date(Number(raw.timestamp) * 1000).toISOString();
+        const status =
+          HISTORY_STATUS_MAP[raw.history_context?.status ?? ""] ?? (direction === "outbound" ? "sent" : "delivered");
+
+        const { error } = await supabase.from("messages").upsert(
+          {
+            conversation_id: conversationId,
+            wamid: raw.id,
+            direction,
+            sender_type: direction === "outbound" ? "agent" : "contact",
+            message_type: messageType,
+            content,
+            media_id: mediaId,
+            status,
+            created_at: occurredAt,
+          },
+          { onConflict: "wamid", ignoreDuplicates: true },
+        );
+        if (error) throw error;
+      }
+    }
+  }
+}
+
+/** Sincroniza los contactos que Yulieth (el negocio) ya tenía guardados en la app de WhatsApp
+ * Business. "remove" se ignora a propósito: una acción hecha en el celular no debe borrar
+ * datos del CRM (historial, tags, custom_fields) que dependan de ese contacto. */
+async function processSmbAppStateSync(supabase: Client, value: SmbAppStateSyncChangeValue) {
+  const metaPhoneNumberId = value.metadata?.phone_number_id;
+  if (!metaPhoneNumberId) return;
+  const phoneNumberRow = await findPhoneNumberRow(supabase, metaPhoneNumberId);
+
+  for (const entry of value.state_sync ?? []) {
+    if (entry.type !== "contact" || entry.action !== "add" || !entry.contact?.phone_number) continue;
+    const waId = normalizeWaId(entry.contact.phone_number);
+    if (!waId) continue;
+    const displayName = entry.contact.full_name ?? entry.contact.first_name ?? null;
+
+    const { data: existing } = await supabase
+      .from("contacts")
+      .select("id")
+      .eq("wa_id", waId)
+      .eq("company_id", phoneNumberRow.company_id)
+      .maybeSingle();
+
+    if (existing) {
+      if (displayName) await supabase.from("contacts").update({ display_name: displayName }).eq("id", existing.id);
+    } else {
+      const { error } = await supabase
+        .from("contacts")
+        .insert({ wa_id: waId, display_name: displayName, company_id: phoneNumberRow.company_id });
+      if (error) throw error;
+    }
+  }
+}
+
+/** Refleja en el hilo del CRM los mensajes que el negocio mandó directo desde la app de
+ * WhatsApp Business (no desde este CRM), para que un agente viendo la conversación no se
+ * pierda lo que ya se respondió por fuera. */
+async function processMessageEchoes(supabase: Client, value: MessageEchoesChangeValue) {
+  const metaPhoneNumberId = value.metadata?.phone_number_id;
+  if (!metaPhoneNumberId) return;
+  const phoneNumberRow = await findPhoneNumberRow(supabase, metaPhoneNumberId);
+
+  for (const raw of value.message_echoes ?? []) {
+    const customerWaId = normalizeWaId(raw.to);
+    if (!customerWaId) continue;
+    const contactId = await findOrCreateContact(supabase, customerWaId, phoneNumberRow.company_id, undefined);
+    const conversationId = await findOrCreateConversation(supabase, contactId, phoneNumberRow.id, phoneNumberRow.company_id);
+
+    const messageType = mapInboundMessageType(raw.type);
+    const mediaId = MEDIA_MESSAGE_TYPES.has(raw.type) ? ((raw[raw.type] as { id?: string })?.id ?? null) : null;
+    const content = (raw[raw.type] as Record<string, unknown>) ?? {};
+    const occurredAt = new Date(Number(raw.timestamp) * 1000).toISOString();
+
+    const { error: messageError } = await supabase.from("messages").upsert(
+      {
+        conversation_id: conversationId,
+        wamid: raw.id,
+        direction: "outbound",
+        sender_type: "agent",
+        message_type: messageType,
+        content,
+        media_id: mediaId,
+        status: "sent",
+        created_at: occurredAt,
+      },
+      { onConflict: "wamid", ignoreDuplicates: true },
+    );
+    if (messageError) throw messageError;
+
+    await supabase.from("conversations").update({ last_outbound_at: occurredAt }).eq("id", conversationId);
+  }
+}
+
 export async function processWebhookEvent(
   supabase: Client,
   webhookEventId: string,
@@ -201,17 +366,31 @@ export async function processWebhookEvent(
   if (event.processed_at) return; // Ya procesado (sweeper + job normal corriendo dos veces, por ejemplo).
 
   try {
-    const payload = event.payload as unknown as WhatsAppWebhookPayload;
+    const payload = event.payload as unknown as { entry?: Array<{ changes?: Array<{ field: string; value: unknown }> }> };
     for (const entry of payload.entry ?? []) {
       for (const change of entry.changes ?? []) {
-        // Solo "messages" trae la forma {metadata, messages, statuses} que procesamos abajo.
-        // Otros fields (history, smb_app_state_sync, smb_message_echoes, account_update, etc.,
-        // habilitados para el onboarding de usuarios de la app de WhatsApp Business) tienen un
-        // `value` con forma distinta y todavía no se procesan; ignorarlos evita reintentos
-        // infinitos por errores de forma (ej. metadata.phone_number_id inexistente).
-        if (change.field !== "messages") continue;
-        await processInboundMessages(supabase, change.value, aiAgentReplyQueue, flowEngineQueue);
-        await processStatusEvents(supabase, change.value);
+        // Cada field trae una forma de `value` distinta; solo se procesan los que se conocen.
+        // Otros (account_update, etc.) se ignoran a propósito para no reintentar infinito por
+        // errores de forma (ej. metadata.phone_number_id inexistente en un value ajeno).
+        switch (change.field) {
+          case "messages": {
+            const value = change.value as WhatsAppWebhookPayload["entry"][number]["changes"][number]["value"];
+            await processInboundMessages(supabase, value, aiAgentReplyQueue, flowEngineQueue);
+            await processStatusEvents(supabase, value);
+            break;
+          }
+          case "history":
+            await processHistorySync(supabase, change.value as HistoryChangeValue);
+            break;
+          case "smb_app_state_sync":
+            await processSmbAppStateSync(supabase, change.value as SmbAppStateSyncChangeValue);
+            break;
+          case "smb_message_echoes":
+            await processMessageEchoes(supabase, change.value as MessageEchoesChangeValue);
+            break;
+          default:
+            break;
+        }
       }
     }
     await supabase
