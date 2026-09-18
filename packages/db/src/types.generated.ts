@@ -1588,7 +1588,23 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      conversation_last_message: {
+        Row: {
+          content: Json | null
+          conversation_id: string | null
+          created_at: string | null
+          message_type: Database["public"]["Enums"]["message_type"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       current_company_id: { Args: never; Returns: string }

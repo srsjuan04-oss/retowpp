@@ -60,36 +60,32 @@ export async function listConversations(): Promise<ConversationListItem[]> {
   if (error) throw error;
   if (!conversations || conversations.length === 0) return [];
 
-  const contactIds = [...new Set(conversations.map((c) => c.contact_id))];
-  const { data: contacts, error: contactsError } = await supabase
-    .from("contacts")
-    .select("id, display_name, wa_id")
-    .in("id", contactIds);
+  // Sin `.in("id", [...])`: con cientos/miles de contactos o conversaciones esa lista de
+  // UUIDs infla la URL hasta que PostgREST la rechaza con "400 Bad Request" (nos pasó en
+  // producción con 691 contactos / 1097 conversaciones). RLS ya scopea por empresa, así
+  // que basta un select plano.
+  const { data: contacts, error: contactsError } = await supabase.from("contacts").select("id, display_name, wa_id");
   if (contactsError) throw contactsError;
   const contactById = new Map((contacts ?? []).map((c) => [c.id, c]));
 
-  const phoneNumberIds = [...new Set(conversations.map((c) => c.phone_number_id))];
   const { data: phoneNumbers, error: phoneNumbersError } = await supabase
     .from("phone_numbers")
-    .select("id, display_phone_number, label")
-    .in("id", phoneNumberIds);
+    .select("id, display_phone_number, label");
   if (phoneNumbersError) throw phoneNumbersError;
   const phoneNumberById = new Map((phoneNumbers ?? []).map((p) => [p.id, p]));
 
-  const conversationIds = conversations.map((c) => c.id);
+  // Vista `conversation_last_message` (DISTINCT ON en Postgres, ver migración
+  // 20260918173000): el mismo problema de URL gigante aplicaba aquí, y peor — traía TODOS
+  // los mensajes de la empresa a Node solo para quedarse con el más reciente de cada uno.
   const { data: recentMessages, error: messagesError } = await supabase
-    .from("messages")
-    .select("conversation_id, message_type, content, created_at")
-    .in("conversation_id", conversationIds)
-    .order("created_at", { ascending: false });
+    .from("conversation_last_message")
+    .select("conversation_id, message_type, content");
   if (messagesError) throw messagesError;
-  // Primera coincidencia por conversation_id = la más reciente, gracias al order desc de arriba.
-  const lastMessageByConversation = new Map<string, { message_type: string; content: unknown }>();
-  for (const m of recentMessages ?? []) {
-    if (!lastMessageByConversation.has(m.conversation_id)) {
-      lastMessageByConversation.set(m.conversation_id, m);
-    }
-  }
+  const lastMessageByConversation = new Map(
+    (recentMessages ?? [])
+      .filter((m) => m.conversation_id !== null && m.message_type !== null)
+      .map((m) => [m.conversation_id as string, { message_type: m.message_type as string, content: m.content }]),
+  );
 
   // Se ordena acá (no en el query) por el más reciente entre last_inbound_at y
   // last_outbound_at: una conversación cuyo único mensaje es saliente (ej. un eco de la app
