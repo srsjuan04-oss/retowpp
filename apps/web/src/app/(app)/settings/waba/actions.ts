@@ -221,11 +221,21 @@ export async function completeEmbeddedSignup(input: {
     // Best-effort: si el número venía de la app de WhatsApp Business (migración), esto dispara
     // el reenvío del historial (180 días) y los contactos por webhook (history/smb_app_state_sync,
     // procesados en el worker). En un número nuevo sin la app, Meta responde error — se ignora
-    // sin romper el resto del alta.
-    await Promise.allSettled([
+    // sin romper el resto del alta, pero SÍ se loguea: sin esto, un fallo real (permisos, formato
+    // de phone_number_id, etc.) queda invisible y parece que "no llegó el historial" sin pista.
+    const [historySyncResult, contactsSyncResult] = await Promise.allSettled([
       client.requestSmbAppDataSync(input.phoneNumberId, "history"),
       client.requestSmbAppDataSync(input.phoneNumberId, "smb_app_state_sync"),
     ]);
+    if (historySyncResult.status === "rejected") {
+      console.error("[completeEmbeddedSignup] requestSmbAppDataSync(history) falló:", historySyncResult.reason);
+    }
+    if (contactsSyncResult.status === "rejected") {
+      console.error(
+        "[completeEmbeddedSignup] requestSmbAppDataSync(smb_app_state_sync) falló:",
+        contactsSyncResult.reason,
+      );
+    }
 
     const { data: existingWaba, error: existingWabaError } = await supabase
       .from("waba_accounts")

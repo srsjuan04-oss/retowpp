@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { formatContactName } from "@/lib/format";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
-import type { ConversationListItem } from "@/lib/inbox/queries";
+import type { ConversationListItem, PhoneNumberOption } from "@/lib/inbox/queries";
 
 const CONVERSATION_STATUS_BADGE_VARIANTS: Record<string, BadgeProps["variant"]> = {
   open: "brand",
@@ -21,20 +21,25 @@ const CONVERSATION_STATUS_BADGE_VARIANTS: Record<string, BadgeProps["variant"]> 
  * (server components), que vuelve a leer con RLS aplicado. Se prioriza
  * corrección/simplicidad sobre un merge optimista en el cliente.
  */
-export function ConversationList({ initialConversations }: { initialConversations: ConversationListItem[] }) {
+export function ConversationList({
+  initialConversations,
+  phoneNumberOptions: allPhoneNumberOptions,
+}: {
+  initialConversations: ConversationListItem[];
+  phoneNumberOptions: PhoneNumberOption[];
+}) {
   const router = useRouter();
   const params = useParams<{ conversationId?: string }>();
   const [phoneNumberFilter, setPhoneNumberFilter] = useState<string>("all");
 
   // Filtro solo en el cliente sobre la lista ya cargada por props (no hay que re-consultar
   // ni tocar la ruta): con un único número conectado no tiene sentido mostrar el selector.
-  const phoneNumberOptions = useMemo(() => {
-    const byId = new Map<string, string>();
-    for (const c of initialConversations) {
-      if (c.phoneNumber) byId.set(c.phoneNumber.id, c.phoneNumber.label);
-    }
-    return [...byId.entries()];
-  }, [initialConversations]);
+  // Se listan TODOS los números de la empresa, no solo los que ya tienen conversaciones —
+  // uno recién conectado (aún sin mensajes) también debe poder elegirse y ver su estado vacío.
+  const phoneNumberOptions = useMemo(
+    () => allPhoneNumberOptions.map((p) => [p.id, p.label] as const),
+    [allPhoneNumberOptions],
+  );
 
   const conversations =
     phoneNumberFilter === "all"

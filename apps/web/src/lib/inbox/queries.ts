@@ -186,6 +186,23 @@ export async function listMessages(conversationId: string): Promise<MessageItem[
   }));
 }
 
+export interface PhoneNumberOption {
+  id: string;
+  label: string;
+}
+
+/** Todos los números conectados de la empresa, para el filtro de la bandeja — a diferencia
+ * de derivarlos de `listConversations`, incluye los que todavía no tienen conversaciones. */
+export async function listPhoneNumberOptions(): Promise<PhoneNumberOption[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("phone_numbers")
+    .select("id, display_phone_number, label")
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((p) => ({ id: p.id, label: p.label ?? p.display_phone_number }));
+}
+
 export interface AssignableProfile {
   id: string;
   fullName: string | null;
