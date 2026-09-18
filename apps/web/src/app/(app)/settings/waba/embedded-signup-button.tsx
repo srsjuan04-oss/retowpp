@@ -37,7 +37,9 @@ type SignupStatus = "idle" | "waiting" | "processing" | "error" | "success";
  *
  * featureType: "whatsapp_business_app_onboarding" habilita el paso de migración que Meta
  * muestra cuando el número que el cliente ingresa ya tiene la app de WhatsApp Business (móvil)
- * activa; si el número no la tiene, el flujo normal de signup sigue igual.
+ * activa; si el número no la tiene, el flujo normal de signup sigue igual. Esa migración manda
+ * un evento aparte, FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING, con SOLO el waba_id (sin
+ * phone_number_id) — el servidor lo resuelve listando los números de la WABA.
  */
 export function EmbeddedSignupButton({
   appId,
@@ -53,7 +55,7 @@ export function EmbeddedSignupButton({
   const [status, setStatus] = useState<SignupStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const codeRef = useRef<string | null>(null);
-  const signupDataRef = useRef<{ wabaId: string; phoneNumberId: string } | null>(null);
+  const signupDataRef = useRef<{ wabaId: string; phoneNumberId?: string } | null>(null);
   const completingRef = useRef(false);
 
   const tryComplete = useCallback(() => {
@@ -64,7 +66,11 @@ export function EmbeddedSignupButton({
     setStatus("processing");
 
     void (async () => {
-      const result = await completeEmbeddedSignup({ code, wabaId: signupData.wabaId, phoneNumberId: signupData.phoneNumberId });
+      const result = await completeEmbeddedSignup({
+        code,
+        wabaId: signupData.wabaId,
+        ...(signupData.phoneNumberId ? { phoneNumberId: signupData.phoneNumberId } : {}),
+      });
       if (result.error) {
         setError(result.error);
         setStatus("error");
@@ -92,6 +98,14 @@ export function EmbeddedSignupButton({
         const phoneNumberId = data.data?.phone_number_id as string | undefined;
         if (wabaId && phoneNumberId) {
           signupDataRef.current = { wabaId, phoneNumberId };
+          tryComplete();
+        }
+      } else if (data.event === "FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING") {
+        // Migración de la app de WhatsApp Business: Meta solo manda el waba_id (el número ya
+        // está registrado); el servidor resuelve el phone_number_id con el WABA.
+        const wabaId = data.data?.waba_id as string | undefined;
+        if (wabaId) {
+          signupDataRef.current = { wabaId };
           tryComplete();
         }
       } else if (data.event === "CANCEL") {

@@ -204,6 +204,23 @@ export class WhatsAppClient {
     return (json.name as string | undefined) ?? null;
   }
 
+  /**
+   * Lista los números de una WABA. Se usa cuando Embedded Signup no manda el phone_number_id
+   * directamente (evento FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING de la migración de la app de
+   * WhatsApp Business: el payload solo trae el waba_id, hay que resolver el número aparte).
+   */
+  async listPhoneNumbers(wabaId: string): Promise<Array<{ id: string; displayPhoneNumber: string; verifiedName: string | null }>> {
+    const res = await this.fetchImpl(this.withAppSecretProof(`${this.baseUrl}/${wabaId}/phone_numbers`), {
+      headers: { Authorization: `Bearer ${this.config.accessToken}` },
+    });
+    const json = await this.parseJson(res);
+    return ((json.data as Array<Record<string, unknown>>) ?? []).map((p) => ({
+      id: p.id as string,
+      displayPhoneNumber: p.display_phone_number as string,
+      verifiedName: (p.verified_name as string | undefined) ?? null,
+    }));
+  }
+
   /** Número visible y nombre verificado, para mostrarlos en la UI justo después de un Embedded Signup. */
   async getPhoneNumberDisplayInfo(phoneNumberId: string): Promise<{ displayPhoneNumber: string; verifiedName: string | null }> {
     const res = await this.fetchImpl(

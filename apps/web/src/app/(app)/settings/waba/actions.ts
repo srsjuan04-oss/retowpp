@@ -169,7 +169,10 @@ export interface CompleteEmbeddedSignupState {
 export async function completeEmbeddedSignup(input: {
   code: string;
   wabaId: string;
-  phoneNumberId: string;
+  /** Ausente cuando viene del evento FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING (migración de la
+   * app de WhatsApp Business): Meta no lo manda porque el número ya está registrado; se resuelve
+   * abajo listando los números de la WABA, y se omite el registro/PIN. */
+  phoneNumberId?: string;
 }): Promise<CompleteEmbeddedSignupState> {
   const session = await requireRole("admin");
   if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
@@ -194,9 +197,22 @@ export async function completeEmbeddedSignup(input: {
 
     const client = new WhatsAppClient({ accessToken, appSecret, ...(graphApiVersion ? { graphApiVersion } : {}) });
 
+    // Migración de la app de WhatsApp Business (evento FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING):
+    // Meta no manda phone_number_id porque el número ya está registrado — se resuelve listando
+    // los números de la WABA. Asume un solo número, el caso típico de esta migración.
+    let phoneNumberId = input.phoneNumberId;
+    const isBusinessAppMigration = !phoneNumberId;
+    if (!phoneNumberId) {
+      const [firstPhoneNumber] = await client.listPhoneNumbers(input.wabaId);
+      if (!firstPhoneNumber) {
+        return { error: "No se encontró ningún número de teléfono en esa cuenta de WhatsApp Business." };
+      }
+      phoneNumberId = firstPhoneNumber.id;
+    }
+
     const [businessName, phoneInfo] = await Promise.all([
       client.getWabaBusinessName(input.wabaId),
-      client.getPhoneNumberDisplayInfo(input.phoneNumberId),
+      client.getPhoneNumberDisplayInfo(phoneNumberId),
     ]);
 
     const supabase = createAdminClient();
@@ -205,17 +221,21 @@ export async function completeEmbeddedSignup(input: {
     // PIN de verificación en dos pasos: si el número ya se había registrado antes (reconectar,
     // reintentar tras un error), Meta ya le tiene un PIN asignado y exige mandar ESE mismo, no
     // uno nuevo — mandar otro distinto responde 133005 "Two step verification PIN Mismatch".
-    // Solo se genera uno nuevo la primera vez que vemos este phone_number_id.
-    const { data: phoneWithPin } = await supabase
-      .from("phone_numbers")
-      .select("two_step_pin_encrypted")
-      .eq("phone_number_id", input.phoneNumberId)
-      .maybeSingle();
-    const pin = phoneWithPin?.two_step_pin_encrypted
-      ? decryptWabaToken(phoneWithPin.two_step_pin_encrypted, encryptionKey)
-      : randomInt(0, 1_000_000).toString().padStart(6, "0");
-
-    await client.registerPhoneNumber(input.phoneNumberId, pin);
+    // Solo se genera uno nuevo la primera vez que vemos este phone_number_id. En una migración
+    // de la app de WhatsApp Business, Meta pide explícitamente omitir este paso por completo:
+    // el número ya está registrado, volver a registrarlo no aplica.
+    let pin: string | null = null;
+    if (!isBusinessAppMigration) {
+      const { data: phoneWithPin } = await supabase
+        .from("phone_numbers")
+        .select("two_step_pin_encrypted")
+        .eq("phone_number_id", phoneNumberId)
+        .maybeSingle();
+      pin = phoneWithPin?.two_step_pin_encrypted
+        ? decryptWabaToken(phoneWithPin.two_step_pin_encrypted, encryptionKey)
+        : randomInt(0, 1_000_000).toString().padStart(6, "0");
+      await client.registerPhoneNumber(phoneNumberId, pin);
+    }
     await client.subscribeAppToWaba(input.wabaId);
 
     // Best-effort: si el número venía de la app de WhatsApp Business (migración), esto dispara
@@ -224,8 +244,8 @@ export async function completeEmbeddedSignup(input: {
     // sin romper el resto del alta, pero SÍ se loguea: sin esto, un fallo real (permisos, formato
     // de phone_number_id, etc.) queda invisible y parece que "no llegó el historial" sin pista.
     const [historySyncResult, contactsSyncResult] = await Promise.allSettled([
-      client.requestSmbAppDataSync(input.phoneNumberId, "history"),
-      client.requestSmbAppDataSync(input.phoneNumberId, "smb_app_state_sync"),
+      client.requestSmbAppDataSync(phoneNumberId, "history"),
+      client.requestSmbAppDataSync(phoneNumberId, "smb_app_state_sync"),
     ]);
     if (historySyncResult.status === "rejected") {
       console.error("[completeEmbeddedSignup] requestSmbAppDataSync(history) falló:", historySyncResult.reason);
@@ -271,11 +291,13 @@ export async function completeEmbeddedSignup(input: {
     }
     if (!wabaAccountId) return { error: "No se pudo determinar la WABA conectada." };
 
-    const encryptedPin = encryptWabaToken(pin, encryptionKey);
+    // Sin PIN (migración de la app de WhatsApp Business): no se toca two_step_pin_encrypted al
+    // actualizar, y se guarda null al insertar — no hay nada que cifrar todavía.
+    const encryptedPin = pin ? encryptWabaToken(pin, encryptionKey) : null;
     const { data: existingPhone, error: existingPhoneError } = await supabase
       .from("phone_numbers")
       .select("id, company_id")
-      .eq("phone_number_id", input.phoneNumberId)
+      .eq("phone_number_id", phoneNumberId)
       .maybeSingle();
     if (existingPhoneError) return { error: existingPhoneError.message };
     if (existingPhone && existingPhone.company_id !== session.companyId) {
@@ -289,14 +311,14 @@ export async function completeEmbeddedSignup(input: {
           waba_account_id: wabaAccountId,
           display_phone_number: phoneInfo.displayPhoneNumber,
           label: phoneInfo.verifiedName,
-          two_step_pin_encrypted: encryptedPin,
+          ...(encryptedPin ? { two_step_pin_encrypted: encryptedPin } : {}),
         })
         .eq("id", existingPhone.id);
       if (updatePhoneError) return { error: updatePhoneError.message };
     } else {
       const { error: insertPhoneError } = await supabase.from("phone_numbers").insert({
         waba_account_id: wabaAccountId,
-        phone_number_id: input.phoneNumberId,
+        phone_number_id: phoneNumberId,
         display_phone_number: phoneInfo.displayPhoneNumber,
         label: phoneInfo.verifiedName,
         two_step_pin_encrypted: encryptedPin,
