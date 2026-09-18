@@ -17,10 +17,16 @@ const MODELS = [
 export function ConnectForm({
   currentModel,
   currentSystemPrompt,
+  currentAiMonthlyCapUsd,
+  currentTopicRestriction,
+  currentOffTopicReply,
   isConnected,
 }: {
   currentModel?: string | undefined;
   currentSystemPrompt?: string | undefined;
+  currentAiMonthlyCapUsd?: number | null | undefined;
+  currentTopicRestriction?: boolean | undefined;
+  currentOffTopicReply?: string | undefined;
   isConnected: boolean;
 }) {
   const [state, formAction, pending] = useActionState(connectAnthropic, initialState);
@@ -60,6 +66,46 @@ export function ConnectForm({
           rows={4}
           defaultValue={currentSystemPrompt}
           placeholder="Eres un agente de servicio al cliente de..."
+          className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+        />
+      </div>
+      <div className="flex flex-col gap-1 border-t pt-3">
+        <Label htmlFor="aiMonthlyCapUsd">Tope de gasto mensual en USD (opcional)</Label>
+        <Input
+          id="aiMonthlyCapUsd"
+          name="aiMonthlyCapUsd"
+          type="number"
+          step="0.01"
+          min="0"
+          placeholder="Sin tope"
+          defaultValue={currentAiMonthlyCapUsd ?? undefined}
+        />
+        <p className="text-xs text-muted-foreground">
+          Al llegar al tope en el mes en curso, el bot deja de llamar a Claude y responde con un mensaje fijo hasta el
+          siguiente mes.
+        </p>
+      </div>
+      <div className="flex items-start gap-2 pt-1">
+        <input
+          id="topicRestriction"
+          name="topicRestriction"
+          type="checkbox"
+          defaultChecked={currentTopicRestriction}
+          className="mt-1 h-4 w-4 rounded border-input"
+        />
+        <Label htmlFor="topicRestriction" className="font-normal">
+          Restringir el bot solo a temas del negocio (rechaza preguntas fuera de tema antes de llamar al modelo
+          principal, con un clasificador económico).
+        </Label>
+      </div>
+      <div className="flex flex-col gap-1">
+        <Label htmlFor="offTopicReply">Respuesta cuando el tema no aplica (opcional)</Label>
+        <textarea
+          id="offTopicReply"
+          name="offTopicReply"
+          rows={2}
+          defaultValue={currentOffTopicReply}
+          placeholder="Solo puedo ayudarte con temas de este negocio..."
           className="rounded-md border border-input bg-background px-3 py-2 text-sm"
         />
       </div>

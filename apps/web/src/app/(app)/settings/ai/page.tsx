@@ -1,5 +1,5 @@
 import { requireRole } from "@/lib/auth/dal";
-import { getAiAgentSettings, listMcpServers } from "@/lib/ai-agent/queries";
+import { getAiAgentSettings, getCurrentMonthAiUsageUsd, listMcpServers } from "@/lib/ai-agent/queries";
 import { Badge } from "@/components/ui/badge";
 import { ConnectForm } from "./connect-form";
 import { AgentToggle } from "./agent-toggle";
@@ -8,7 +8,11 @@ import { McpServerList } from "./mcp-server-list";
 
 export default async function AiAgentSettingsPage() {
   await requireRole("admin");
-  const [settings, mcpServers] = await Promise.all([getAiAgentSettings(), listMcpServers()]);
+  const [settings, mcpServers, monthlyUsageUsd] = await Promise.all([
+    getAiAgentSettings(),
+    listMcpServers(),
+    getCurrentMonthAiUsageUsd(),
+  ]);
 
   return (
     <div className="flex flex-1 flex-col gap-8 p-8">
@@ -19,7 +23,14 @@ export default async function AiAgentSettingsPage() {
           <h2 className="text-sm font-medium">Conexión con Claude</h2>
           <Badge variant={settings ? "success" : "neutral"}>{settings ? "conectado" : "sin conectar"}</Badge>
         </div>
-        <ConnectForm currentModel={settings?.model} currentSystemPrompt={settings?.systemPrompt ?? undefined} isConnected={!!settings} />
+        <ConnectForm
+          currentModel={settings?.model}
+          currentSystemPrompt={settings?.systemPrompt ?? undefined}
+          currentAiMonthlyCapUsd={settings?.aiMonthlyCapUsd}
+          currentTopicRestriction={settings?.topicRestriction}
+          currentOffTopicReply={settings?.offTopicReply ?? undefined}
+          isConnected={!!settings}
+        />
         {settings && (
           <div className="border-t pt-4">
             <AgentToggle isEnabled={settings.isEnabled} />
@@ -27,6 +38,10 @@ export default async function AiAgentSettingsPage() {
               {settings.isEnabled
                 ? "El bot está activo: responderá automáticamente a los mensajes entrantes."
                 : "El bot está inactivo: los mensajes entrantes no reciben respuesta automática."}
+            </p>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Gasto en Claude este mes: <span className="font-medium text-foreground">${monthlyUsageUsd.toFixed(2)}</span>
+              {settings.aiMonthlyCapUsd != null && <> de ${settings.aiMonthlyCapUsd.toFixed(2)}</>}
             </p>
           </div>
         )}

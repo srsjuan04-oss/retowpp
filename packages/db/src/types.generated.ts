@@ -22,33 +22,42 @@ export type Database = {
     Tables: {
       ai_agent_settings: {
         Row: {
+          ai_monthly_cap_usd: number | null
           anthropic_api_key_encrypted: string
           company_id: string
           created_at: string
           id: string
           is_enabled: boolean
           model: string
+          off_topic_reply: string | null
           system_prompt: string | null
+          topic_restriction: boolean
           updated_at: string
         }
         Insert: {
+          ai_monthly_cap_usd?: number | null
           anthropic_api_key_encrypted: string
           company_id: string
           created_at?: string
           id?: string
           is_enabled?: boolean
           model?: string
+          off_topic_reply?: string | null
           system_prompt?: string | null
+          topic_restriction?: boolean
           updated_at?: string
         }
         Update: {
+          ai_monthly_cap_usd?: number | null
           anthropic_api_key_encrypted?: string
           company_id?: string
           created_at?: string
           id?: string
           is_enabled?: boolean
           model?: string
+          off_topic_reply?: string | null
           system_prompt?: string | null
+          topic_restriction?: boolean
           updated_at?: string
         }
         Relationships: [
@@ -57,6 +66,54 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_usage_log: {
+        Row: {
+          company_id: string
+          conversation_id: string | null
+          cost_usd: number
+          created_at: string
+          id: string
+          input_tokens: number
+          model: string
+          output_tokens: number
+        }
+        Insert: {
+          company_id: string
+          conversation_id?: string | null
+          cost_usd: number
+          created_at?: string
+          id?: string
+          input_tokens: number
+          model: string
+          output_tokens: number
+        }
+        Update: {
+          company_id?: string
+          conversation_id?: string | null
+          cost_usd?: number
+          created_at?: string
+          id?: string
+          input_tokens?: number
+          model?: string
+          output_tokens?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_log_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_usage_log_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
             referencedColumns: ["id"]
           },
         ]

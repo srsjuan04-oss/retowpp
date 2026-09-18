@@ -17,6 +17,9 @@ const ConnectSchema = z.object({
   apiKey: z.string().optional(),
   model: z.enum(ALLOWED_MODELS, { error: "Elige un modelo válido." }),
   systemPrompt: z.string().optional(),
+  aiMonthlyCapUsd: z.string().optional(),
+  topicRestriction: z.boolean(),
+  offTopicReply: z.string().optional(),
 });
 
 /**
@@ -32,8 +35,19 @@ export async function connectAnthropic(_prev: ActionState | undefined, formData:
     apiKey: formData.get("apiKey") || undefined,
     model: formData.get("model"),
     systemPrompt: formData.get("systemPrompt") || undefined,
+    aiMonthlyCapUsd: formData.get("aiMonthlyCapUsd") || undefined,
+    topicRestriction: formData.get("topicRestriction") === "on",
+    offTopicReply: formData.get("offTopicReply") || undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
+
+  let aiMonthlyCapUsd: number | null = null;
+  if (parsed.data.aiMonthlyCapUsd) {
+    aiMonthlyCapUsd = Number(parsed.data.aiMonthlyCapUsd);
+    if (!Number.isFinite(aiMonthlyCapUsd) || aiMonthlyCapUsd <= 0) {
+      return { error: "El tope mensual debe ser un número mayor a 0." };
+    }
+  }
 
   const encryptionKey = process.env.WABA_TOKEN_ENCRYPTION_KEY;
   if (!encryptionKey) return { error: "Falta configurar WABA_TOKEN_ENCRYPTION_KEY en el servidor." };
@@ -49,6 +63,9 @@ export async function connectAnthropic(_prev: ActionState | undefined, formData:
   const baseFields = {
     model: parsed.data.model,
     system_prompt: parsed.data.systemPrompt ?? null,
+    ai_monthly_cap_usd: aiMonthlyCapUsd,
+    topic_restriction: parsed.data.topicRestriction,
+    off_topic_reply: parsed.data.offTopicReply ?? null,
   };
 
   if (existing) {
