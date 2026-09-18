@@ -1,4 +1,5 @@
 import Link from "next/link";
+import * as z from "zod";
 import type { ConsentStatus } from "@reto-whatsapp/db";
 import { listContacts, listTags } from "@/lib/contacts/queries";
 import { formatContactName } from "@/lib/format";
@@ -20,17 +21,23 @@ const CONSENT_BADGE_VARIANTS: Record<ConsentStatus, BadgeProps["variant"]> = {
   pending: "warning",
 };
 
+// consent_status es un enum de Postgres: un valor fuera de estos 4 hace que
+// .eq("consent_status", …) falle con un error crudo de la base de datos en vez
+// de simplemente no filtrar. Un ?consent= inválido en la URL se ignora.
+const ConsentFilterSchema = z.enum(["subscribed", "unsubscribed", "blocked", "pending"]).optional();
+
 export default async function ContactsPage({
   searchParams,
 }: {
   searchParams: Promise<{ search?: string; tag?: string; consent?: string }>;
 }) {
   const { search, tag, consent } = await searchParams;
+  const consentStatus = ConsentFilterSchema.safeParse(consent).data;
   const [contacts, tags] = await Promise.all([
     listContacts({
       search,
       tagId: tag,
-      consentStatus: consent as ConsentStatus | undefined,
+      consentStatus,
     }),
     listTags(),
   ]);
