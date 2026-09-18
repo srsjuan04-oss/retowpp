@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { requireRole } from "@/lib/auth/dal";
+import { requirePlatformAdmin } from "@/lib/auth/dal";
 import { getFlow } from "@/lib/flows/queries";
 import { Badge } from "@/components/ui/badge";
 import { FlowStatusToggle } from "./flow-status-toggle";
@@ -7,7 +7,7 @@ import { AddStepForm } from "./add-step-form";
 import { FlowStepCard } from "./flow-step-card";
 
 export default async function FlowDetailPage({ params }: { params: Promise<{ flowId: string }> }) {
-  await requireRole("admin");
+  await requirePlatformAdmin();
   const { flowId } = await params;
 
   const flow = await getFlow(flowId);

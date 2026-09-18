@@ -33,13 +33,19 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/contacts", label: "Contactos", icon: Users },
   { href: "/templates", label: "Plantillas", icon: ScrollText, roles: ["admin", "supervisor"] },
   { href: "/campaigns", label: "Campañas", icon: Megaphone, roles: ["admin", "supervisor"] },
-  { href: "/flows", label: "Flujos", icon: Workflow, roles: ["admin"] },
   { href: "/complementos", label: "Complementos", icon: Plug, roles: ["admin", "supervisor"] },
   { href: "/settings/waba", label: "Conexión WABA", icon: Link2, roles: ["admin", "supervisor"] },
   { href: "/stats", label: "Estadísticas", icon: BarChart3, roles: ["admin", "supervisor"] },
   { href: "/audit-log", label: "Auditoría", icon: ScrollText, roles: ["admin", "supervisor"] },
   { href: "/settings/custom-fields", label: "Campos personalizados", icon: Tags, roles: ["admin"] },
   { href: "/settings/ai", label: "Asistente de IA", icon: Bot, roles: ["admin"] },
+];
+
+/** Solo para el admin de plataforma (nunca para clientes): Flujos no está terminado
+ * todavía, así que ni el nombre debe aparecerles para no generar confusión. */
+const PLATFORM_NAV_ITEMS: Omit<NavItem, "roles">[] = [
+  { href: "/plataforma/empresas", label: "Empresas", icon: Building2 },
+  { href: "/flows", label: "Flujos", icon: Workflow },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -96,18 +102,24 @@ export function AppSidebar({
           <span className="px-3 pb-1 text-xs font-medium uppercase tracking-wide text-sidebar-foreground/50">
             Plataforma
           </span>
-          <Link
-            href="/plataforma/empresas"
-            className={cn(
-              "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
-              isActive(pathname, "/plataforma/empresas")
-                ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
-            )}
-          >
-            <Building2 className="size-4 shrink-0" />
-            Empresas
-          </Link>
+          {PLATFORM_NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors",
+                  isActive(pathname, item.href)
+                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+                )}
+              >
+                <Icon className="size-4 shrink-0" />
+                {item.label}
+              </Link>
+            );
+          })}
         </div>
       )}
 

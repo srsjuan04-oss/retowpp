@@ -1588,6 +1588,31 @@ export type Database = {
       }
     }
     Views: {
+      campaign_recipient_counts: {
+        Row: {
+          campaign_id: string | null
+          count: number | null
+          status:
+            | Database["public"]["Enums"]["campaign_recipient_status"]
+            | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campaign_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contact_consent_counts: {
+        Row: {
+          consent_status: Database["public"]["Enums"]["consent_status"] | null
+          count: number | null
+        }
+        Relationships: []
+      }
       conversation_last_message: {
         Row: {
           content: Json | null
@@ -1604,6 +1629,21 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      conversation_status_counts: {
+        Row: {
+          count: number | null
+          status: Database["public"]["Enums"]["conversation_status"] | null
+        }
+        Relationships: []
+      }
+      message_status_counts: {
+        Row: {
+          count: number | null
+          direction: Database["public"]["Enums"]["message_direction"] | null
+          status: Database["public"]["Enums"]["message_status"] | null
+        }
+        Relationships: []
       }
     }
     Functions: {

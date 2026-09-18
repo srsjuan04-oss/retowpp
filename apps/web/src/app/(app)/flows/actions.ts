@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import * as z from "zod";
-import { requireRole } from "@/lib/auth/dal";
+import { requirePlatformAdmin } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 
 export interface ActionState {
@@ -19,7 +19,7 @@ const CreateFlowSchema = z.object({
 
 /** Crea el flujo inactivo (sin pasos todavía); se arma desde /flows/[flowId]. */
 export async function createFlow(_prev: ActionState | undefined, formData: FormData): Promise<ActionState> {
-  const session = await requireRole("admin");
+  const session = await requirePlatformAdmin();
   if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
 
   const parsed = CreateFlowSchema.safeParse({
@@ -65,7 +65,7 @@ const AddStepSchema = z.object({
 
 /** Sube el archivo (si aplica) a Storage y agrega el paso al final del flujo. */
 export async function addStep(_prev: ActionState | undefined, formData: FormData): Promise<ActionState> {
-  await requireRole("admin");
+  await requirePlatformAdmin();
 
   const parsed = AddStepSchema.safeParse({
     flowId: formData.get("flowId"),
@@ -128,7 +128,7 @@ export async function addStep(_prev: ActionState | undefined, formData: FormData
 
 /** Elimina un paso; las ramas que salen de él se borran en cascada y las que apuntaban a él quedan sin destino (fin de flujo). */
 export async function deleteStep(flowId: string, stepId: string): Promise<ActionState> {
-  await requireRole("admin");
+  await requirePlatformAdmin();
   const supabase = await createClient();
 
   const { error } = await supabase.from("flow_steps").delete().eq("id", stepId);
@@ -149,7 +149,7 @@ const AddBranchSchema = z.object({
 
 /** Agrega una rama de decisión desde un paso: a qué paso continúa (o termina el flujo) según lo que responda el contacto. */
 export async function addBranch(_prev: ActionState | undefined, formData: FormData): Promise<ActionState> {
-  await requireRole("admin");
+  await requirePlatformAdmin();
 
   const parsed = AddBranchSchema.safeParse({
     flowId: formData.get("flowId"),
@@ -181,7 +181,7 @@ export async function addBranch(_prev: ActionState | undefined, formData: FormDa
 }
 
 export async function deleteBranch(flowId: string, branchId: string): Promise<ActionState> {
-  await requireRole("admin");
+  await requirePlatformAdmin();
   const supabase = await createClient();
 
   const { error } = await supabase.from("flow_branches").delete().eq("id", branchId);
@@ -193,7 +193,7 @@ export async function deleteBranch(flowId: string, branchId: string): Promise<Ac
 
 /** Activa o desactiva el flujo. Al activar: exige al menos un paso y depende del índice único parcial (un solo flujo activo por plantilla) para evitar ambigüedad. */
 export async function setFlowActive(flowId: string, isActive: boolean): Promise<ActionState> {
-  await requireRole("admin");
+  await requirePlatformAdmin();
   const supabase = await createClient();
 
   if (isActive) {

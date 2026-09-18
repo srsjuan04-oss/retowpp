@@ -1,9 +1,9 @@
-import { requireRole } from "@/lib/auth/dal";
+import { requirePlatformAdmin } from "@/lib/auth/dal";
 import { listActiveWabaAccounts, listApprovedTemplatesForFlows } from "@/lib/flows/queries";
 import { NewFlowForm } from "./new-flow-form";
 
 export default async function NewFlowPage() {
-  await requireRole("admin");
+  await requirePlatformAdmin();
   const [wabas, templates] = await Promise.all([listActiveWabaAccounts(), listApprovedTemplatesForFlows()]);
 
   return (

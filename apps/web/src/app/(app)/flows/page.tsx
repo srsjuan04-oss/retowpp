@@ -1,10 +1,10 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/auth/dal";
+import { requirePlatformAdmin } from "@/lib/auth/dal";
 import { listFlows } from "@/lib/flows/queries";
 import { Badge } from "@/components/ui/badge";
 
 export default async function FlowsPage() {
-  await requireRole("admin");
+  await requirePlatformAdmin();
   const flows = await listFlows();
 
   return (
