@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import * as z from "zod";
 import { requireRole } from "@/lib/auth/dal";
+import { friendlyDbError } from "@/lib/db-error";
 import { createClient } from "@/lib/supabase/server";
 
 export interface ActionState {
@@ -46,7 +47,7 @@ export async function createHotmartWebhook(_prev: ActionState | undefined, formD
     created_by: session.id,
     company_id: session.companyId,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath("/complementos/hotmart");
   return {};

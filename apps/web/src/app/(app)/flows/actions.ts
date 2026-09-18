@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import * as z from "zod";
 import { requirePlatformAdmin } from "@/lib/auth/dal";
+import { friendlyDbError } from "@/lib/db-error";
 import { createClient } from "@/lib/supabase/server";
 
 export interface ActionState {
@@ -51,7 +52,7 @@ export async function createFlow(_prev: ActionState | undefined, formData: FormD
     })
     .select("id")
     .single();
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath("/flows");
   redirect(`/flows/${flow.id}`);
@@ -120,7 +121,7 @@ export async function addStep(_prev: ActionState | undefined, formData: FormData
     media_path: mediaPath,
     media_mime_type: mediaMimeType,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath(`/flows/${flowId}`);
   return { success: true };
@@ -132,7 +133,7 @@ export async function deleteStep(flowId: string, stepId: string): Promise<Action
   const supabase = await createClient();
 
   const { error } = await supabase.from("flow_steps").delete().eq("id", stepId);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath(`/flows/${flowId}`);
   return { success: true };
@@ -174,7 +175,7 @@ export async function addBranch(_prev: ActionState | undefined, formData: FormDa
     to_step_id: toStepId || null,
     priority,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath(`/flows/${flowId}`);
   return { success: true };
@@ -185,7 +186,7 @@ export async function deleteBranch(flowId: string, branchId: string): Promise<Ac
   const supabase = await createClient();
 
   const { error } = await supabase.from("flow_branches").delete().eq("id", branchId);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath(`/flows/${flowId}`);
   return { success: true };
@@ -201,7 +202,7 @@ export async function setFlowActive(flowId: string, isActive: boolean): Promise<
       .from("flow_steps")
       .select("id", { count: "exact", head: true })
       .eq("flow_id", flowId);
-    if (countError) return { error: countError.message };
+    if (countError) return { error: friendlyDbError(countError) };
     if (!count) return { error: "Agrega al menos un paso antes de activar el flujo." };
   }
 
@@ -210,7 +211,7 @@ export async function setFlowActive(flowId: string, isActive: boolean): Promise<
     if (error.code === "23505") {
       return { error: "Ya hay otro flujo activo para esta plantilla. Desactívalo primero." };
     }
-    return { error: error.message };
+    return { error: friendlyDbError(error) };
   }
 
   revalidatePath(`/flows/${flowId}`);

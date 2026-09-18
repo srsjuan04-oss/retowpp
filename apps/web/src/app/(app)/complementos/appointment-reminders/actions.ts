@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import * as z from "zod";
 import { requireRole } from "@/lib/auth/dal";
+import { friendlyDbError } from "@/lib/db-error";
 import { createClient } from "@/lib/supabase/server";
 
 export interface ActionState {
@@ -28,7 +29,7 @@ export async function setAppointmentReminderTemplate(_prev: ActionState | undefi
     .from("appointment_reminder_webhooks")
     .update({ template_id: parsed.data.templateId })
     .eq("id", parsed.data.webhookId);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath("/complementos/appointment-reminders");
   return {};

@@ -5,6 +5,7 @@ import * as z from "zod";
 import { normalizeWaId } from "@reto-whatsapp/core";
 import type { ConsentStatus, Json } from "@reto-whatsapp/db";
 import { requireRole, verifySession } from "@/lib/auth/dal";
+import { friendlyDbError } from "@/lib/db-error";
 import { createClient } from "@/lib/supabase/server";
 
 const ConsentSchema = z.object({
@@ -42,7 +43,7 @@ export async function setConsentStatus(_prev: ActionState | undefined, formData:
   if (parsed.data.consentStatus === "blocked") update.blocked_at = new Date().toISOString();
 
   const { error } = await supabase.from("contacts").update(update).eq("id", parsed.data.contactId);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath(`/contacts/${parsed.data.contactId}`);
   revalidatePath("/contacts");
@@ -67,7 +68,7 @@ export async function updateContactName(_prev: ActionState | undefined, formData
     .from("contacts")
     .update({ display_name: parsed.data.displayName ?? null })
     .eq("id", parsed.data.contactId);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath(`/contacts/${parsed.data.contactId}`);
   return { success: true };
@@ -98,7 +99,7 @@ export async function createContact(_prev: ActionState | undefined, formData: Fo
     .insert({ wa_id: waId, display_name: parsed.data.displayName ?? null, company_id: session.companyId })
     .select("id")
     .single();
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   if (tagIds.length > 0) {
     const { error: tagsError } = await supabase
@@ -147,7 +148,7 @@ export async function createTag(_prev: ActionState | undefined, formData: FormDa
 
   const supabase = await createClient();
   const { error } = await supabase.from("tags").insert({ ...parsed.data, company_id: session.companyId });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath("/contacts");
   return { success: true };
@@ -183,7 +184,7 @@ export async function createCustomFieldDefinition(
     field_type: parsed.data.fieldType,
     company_id: session.companyId,
   });
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath("/contacts");
   revalidatePath("/settings/custom-fields");
@@ -224,7 +225,7 @@ export async function updateContactCustomField(
     .from("contacts")
     .update({ custom_fields: nextCustomFields as unknown as Json })
     .eq("id", parsed.data.contactId);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath(`/contacts/${parsed.data.contactId}`);
   return { success: true };

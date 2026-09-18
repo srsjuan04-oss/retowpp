@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import * as z from "zod";
 import { WhatsAppClient, decryptWabaToken, encryptWabaToken, exchangeEmbeddedSignupCode } from "@reto-whatsapp/core";
 import { requireRole } from "@/lib/auth/dal";
+import { friendlyDbError } from "@/lib/db-error";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const ConnectWabaSchema = z.object({
@@ -149,7 +150,7 @@ export async function setPhoneNumberAiAgentEnabled(
   }
 
   const { error } = await supabase.from("phone_numbers").update({ ai_agent_enabled: enabled }).eq("id", phoneNumberId);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath("/settings/waba");
   return { success: true };

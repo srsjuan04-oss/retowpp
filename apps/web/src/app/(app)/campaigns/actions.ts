@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import * as z from "zod";
 import { resolveCampaignVariables } from "@reto-whatsapp/core";
 import { requireRole } from "@/lib/auth/dal";
+import { friendlyDbError } from "@/lib/db-error";
 import { createClient } from "@/lib/supabase/server";
 import { enqueueCampaignDispatch } from "@/lib/queues/campaign-dispatch";
 import { previewAudience, type AudienceFilter } from "@/lib/campaigns/queries";
@@ -55,7 +56,7 @@ export async function createCampaign(_prev: ActionState | undefined, formData: F
     })
     .select("id")
     .single();
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath("/campaigns");
   redirect(`/campaigns/${campaign.id}`);

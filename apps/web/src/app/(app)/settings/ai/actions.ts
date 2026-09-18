@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import * as z from "zod";
 import { encryptWabaToken } from "@reto-whatsapp/core";
 import { requireRole } from "@/lib/auth/dal";
+import { friendlyDbError } from "@/lib/db-error";
 import { createClient } from "@/lib/supabase/server";
 
 export interface ActionState {
@@ -73,14 +74,14 @@ export async function connectAnthropic(_prev: ActionState | undefined, formData:
       ? { ...baseFields, anthropic_api_key_encrypted: encryptWabaToken(parsed.data.apiKey, encryptionKey) }
       : baseFields;
     const { error } = await supabase.from("ai_agent_settings").update(update).eq("id", existing.id);
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyDbError(error) };
   } else {
     const { error } = await supabase.from("ai_agent_settings").insert({
       ...baseFields,
       anthropic_api_key_encrypted: encryptWabaToken(parsed.data.apiKey!, encryptionKey),
       company_id: session.companyId,
     });
-    if (error) return { error: error.message };
+    if (error) return { error: friendlyDbError(error) };
   }
 
   revalidatePath("/settings/ai");
@@ -95,7 +96,7 @@ export async function setAgentEnabled(isEnabled: boolean): Promise<ActionState> 
   if (!existing) return { error: "Conecta primero la API key de Anthropic." };
 
   const { error } = await supabase.from("ai_agent_settings").update({ is_enabled: isEnabled }).eq("id", existing.id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath("/settings/ai");
   return { success: true };
@@ -142,7 +143,7 @@ export async function setMcpServerActive(id: string, isActive: boolean): Promise
   await requireRole("admin");
   const supabase = await createClient();
   const { error } = await supabase.from("mcp_servers").update({ is_active: isActive }).eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
   revalidatePath("/settings/ai");
   return { success: true };
 }
@@ -151,7 +152,7 @@ export async function deleteMcpServer(id: string): Promise<ActionState> {
   await requireRole("admin");
   const supabase = await createClient();
   const { error } = await supabase.from("mcp_servers").delete().eq("id", id);
-  if (error) return { error: error.message };
+  if (error) return { error: friendlyDbError(error) };
   revalidatePath("/settings/ai");
   return { success: true };
 }
