@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -24,6 +24,22 @@ const CONVERSATION_STATUS_BADGE_VARIANTS: Record<string, BadgeProps["variant"]> 
 export function ConversationList({ initialConversations }: { initialConversations: ConversationListItem[] }) {
   const router = useRouter();
   const params = useParams<{ conversationId?: string }>();
+  const [phoneNumberFilter, setPhoneNumberFilter] = useState<string>("all");
+
+  // Filtro solo en el cliente sobre la lista ya cargada por props (no hay que re-consultar
+  // ni tocar la ruta): con un único número conectado no tiene sentido mostrar el selector.
+  const phoneNumberOptions = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const c of initialConversations) {
+      if (c.phoneNumber) byId.set(c.phoneNumber.id, c.phoneNumber.label);
+    }
+    return [...byId.entries()];
+  }, [initialConversations]);
+
+  const conversations =
+    phoneNumberFilter === "all"
+      ? initialConversations
+      : initialConversations.filter((c) => c.phoneNumber?.id === phoneNumberFilter);
 
   useEffect(() => {
     const supabase = createClient();
@@ -68,46 +84,65 @@ export function ConversationList({ initialConversations }: { initialConversation
   }, [router]);
 
   return (
-    <ul className="flex flex-col">
-      {initialConversations.map((conversation) => (
-        <li key={conversation.id}>
-          <Link
-            href={`/inbox/${conversation.id}`}
-            className={cn(
-              "flex flex-col gap-1 border-b px-4 py-3 text-sm hover:bg-accent",
-              params.conversationId === conversation.id && "bg-accent",
-            )}
-          >
-            <span className="flex items-center gap-1.5">
-              {conversation.isUnread && (
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" aria-label="No leído" />
-              )}
-              <span className={cn("font-medium", conversation.isUnread && "font-semibold text-foreground")}>
-                {formatContactName(conversation.contact.displayName) ?? conversation.contact.waId}
-              </span>
-            </span>
-            {conversation.lastMessagePreview && (
-              <span
-                className={cn(
-                  "truncate text-xs",
-                  conversation.isUnread ? "font-medium text-foreground/80" : "text-muted-foreground",
-                )}
-              >
-                {conversation.lastMessagePreview}
-              </span>
-            )}
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Badge variant={CONVERSATION_STATUS_BADGE_VARIANTS[conversation.status] ?? "neutral"}>
-                {conversation.status}
-              </Badge>
-              {conversation.assignedTo ? "asignada" : "sin asignar"}
-            </span>
-          </Link>
-        </li>
-      ))}
-      {initialConversations.length === 0 && (
-        <li className="p-4 text-sm text-muted-foreground">No hay conversaciones todavía.</li>
+    <div className="flex flex-col">
+      {phoneNumberOptions.length > 1 && (
+        <select
+          value={phoneNumberFilter}
+          onChange={(e) => setPhoneNumberFilter(e.target.value)}
+          className="m-2 rounded-md border bg-background px-2 py-1.5 text-sm"
+          aria-label="Filtrar por número"
+        >
+          <option value="all">Todos los números</option>
+          {phoneNumberOptions.map(([id, label]) => (
+            <option key={id} value={id}>
+              {label}
+            </option>
+          ))}
+        </select>
       )}
-    </ul>
+      <ul className="flex flex-col">
+        {conversations.map((conversation) => (
+          <li key={conversation.id}>
+            <Link
+              href={`/inbox/${conversation.id}`}
+              className={cn(
+                "flex flex-col gap-1 border-b px-4 py-3 text-sm hover:bg-accent",
+                params.conversationId === conversation.id && "bg-accent",
+              )}
+            >
+              <span className="flex items-center gap-1.5">
+                {conversation.isUnread && (
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" aria-label="No leído" />
+                )}
+                <span className={cn("font-medium", conversation.isUnread && "font-semibold text-foreground")}>
+                  {formatContactName(conversation.contact.displayName) ?? conversation.contact.waId}
+                </span>
+              </span>
+              {conversation.lastMessagePreview && (
+                <span
+                  className={cn(
+                    "truncate text-xs",
+                    conversation.isUnread ? "font-medium text-foreground/80" : "text-muted-foreground",
+                  )}
+                >
+                  {conversation.lastMessagePreview}
+                </span>
+              )}
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Badge variant={CONVERSATION_STATUS_BADGE_VARIANTS[conversation.status] ?? "neutral"}>
+                  {conversation.status}
+                </Badge>
+                {conversation.assignedTo ? "asignada" : "sin asignar"}
+              </span>
+            </Link>
+          </li>
+        ))}
+        {conversations.length === 0 && (
+          <li className="p-4 text-sm text-muted-foreground">
+            {initialConversations.length === 0 ? "No hay conversaciones todavía." : "Sin conversaciones para este número."}
+          </li>
+        )}
+      </ul>
+    </div>
   );
 }

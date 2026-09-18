@@ -20,6 +20,8 @@ export interface ConversationListItem {
   /** Solo se llena en `listConversations`; el hilo de detalle ya muestra todos los mensajes, no la necesita. */
   lastMessagePreview?: string | null;
   contact: { id: string; displayName: string | null; waId: string };
+  /** Solo se llena en `listConversations`, para filtrar la bandeja por número. */
+  phoneNumber?: { id: string; label: string };
 }
 
 /** Sin lectura por-agente: un solo `last_read_at` por conversación alcanza para el caso de uso actual. */
@@ -51,7 +53,9 @@ export async function listConversations(): Promise<ConversationListItem[]> {
 
   const { data: conversations, error } = await supabase
     .from("conversations")
-    .select("id, status, assigned_to, assigned_team_id, last_inbound_at, last_outbound_at, last_read_at, contact_id")
+    .select(
+      "id, status, assigned_to, assigned_team_id, last_inbound_at, last_outbound_at, last_read_at, contact_id, phone_number_id",
+    )
     .order("last_inbound_at", { ascending: false, nullsFirst: false });
   if (error) throw error;
   if (!conversations || conversations.length === 0) return [];
@@ -63,6 +67,14 @@ export async function listConversations(): Promise<ConversationListItem[]> {
     .in("id", contactIds);
   if (contactsError) throw contactsError;
   const contactById = new Map((contacts ?? []).map((c) => [c.id, c]));
+
+  const phoneNumberIds = [...new Set(conversations.map((c) => c.phone_number_id))];
+  const { data: phoneNumbers, error: phoneNumbersError } = await supabase
+    .from("phone_numbers")
+    .select("id, display_phone_number, label")
+    .in("id", phoneNumberIds);
+  if (phoneNumbersError) throw phoneNumbersError;
+  const phoneNumberById = new Map((phoneNumbers ?? []).map((p) => [p.id, p]));
 
   const conversationIds = conversations.map((c) => c.id);
   const { data: recentMessages, error: messagesError } = await supabase
@@ -81,6 +93,7 @@ export async function listConversations(): Promise<ConversationListItem[]> {
 
   return conversations.map((c) => {
     const lastMessage = lastMessageByConversation.get(c.id);
+    const phoneNumber = phoneNumberById.get(c.phone_number_id);
     return {
       id: c.id,
       status: c.status,
@@ -96,6 +109,10 @@ export async function listConversations(): Promise<ConversationListItem[]> {
         id: c.contact_id,
         displayName: contactById.get(c.contact_id)?.display_name ?? null,
         waId: contactById.get(c.contact_id)?.wa_id ?? "",
+      },
+      phoneNumber: {
+        id: c.phone_number_id,
+        label: phoneNumber ? (phoneNumber.label ?? phoneNumber.display_phone_number) : "",
       },
     };
   });
