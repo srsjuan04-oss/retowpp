@@ -91,31 +91,40 @@ export async function listConversations(): Promise<ConversationListItem[]> {
     }
   }
 
-  return conversations.map((c) => {
-    const lastMessage = lastMessageByConversation.get(c.id);
-    const phoneNumber = phoneNumberById.get(c.phone_number_id);
-    return {
-      id: c.id,
-      status: c.status,
-      assignedTo: c.assigned_to,
-      assignedTeamId: c.assigned_team_id,
-      lastInboundAt: c.last_inbound_at,
-      lastOutboundAt: c.last_outbound_at,
-      isUnread: computeIsUnread(c.last_inbound_at, c.last_read_at),
-      lastMessagePreview: lastMessage
-        ? derivePreview(lastMessage.message_type, lastMessage.content as Record<string, unknown>)
-        : null,
-      contact: {
-        id: c.contact_id,
-        displayName: contactById.get(c.contact_id)?.display_name ?? null,
-        waId: contactById.get(c.contact_id)?.wa_id ?? "",
-      },
-      phoneNumber: {
-        id: c.phone_number_id,
-        label: phoneNumber ? (phoneNumber.label ?? phoneNumber.display_phone_number) : "",
-      },
-    };
-  });
+  // Se ordena acá (no en el query) por el más reciente entre last_inbound_at y
+  // last_outbound_at: una conversación cuyo único mensaje es saliente (ej. un eco de la app
+  // de WhatsApp Business, una campaña, un recordatorio) tiene last_inbound_at null, y con el
+  // order de Postgrest ordenando solo por esa columna se iba al fondo de la lista en vez de
+  // aparecer arriba como reciente.
+  const toTime = (value: string | null) => (value ? new Date(value).getTime() : 0);
+
+  return conversations
+    .map((c) => {
+      const lastMessage = lastMessageByConversation.get(c.id);
+      const phoneNumber = phoneNumberById.get(c.phone_number_id);
+      return {
+        id: c.id,
+        status: c.status,
+        assignedTo: c.assigned_to,
+        assignedTeamId: c.assigned_team_id,
+        lastInboundAt: c.last_inbound_at,
+        lastOutboundAt: c.last_outbound_at,
+        isUnread: computeIsUnread(c.last_inbound_at, c.last_read_at),
+        lastMessagePreview: lastMessage
+          ? derivePreview(lastMessage.message_type, lastMessage.content as Record<string, unknown>)
+          : null,
+        contact: {
+          id: c.contact_id,
+          displayName: contactById.get(c.contact_id)?.display_name ?? null,
+          waId: contactById.get(c.contact_id)?.wa_id ?? "",
+        },
+        phoneNumber: {
+          id: c.phone_number_id,
+          label: phoneNumber ? (phoneNumber.label ?? phoneNumber.display_phone_number) : "",
+        },
+      };
+    })
+    .sort((a, b) => Math.max(toTime(b.lastInboundAt), toTime(b.lastOutboundAt)) - Math.max(toTime(a.lastInboundAt), toTime(a.lastOutboundAt)));
 }
 
 export interface ConversationDetail extends ConversationListItem {
