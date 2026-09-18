@@ -17,3 +17,9 @@ supabase/.temp/
 
 # Config local de Claude Code (permisos/ajustes de esta máquina, no de equipo)
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# Skills de agente instaladas localmente (ej. HyperFrames), no son parte de la app
+.agents/
+.claude/skills/
+skills-lock.json
