@@ -7,13 +7,11 @@ import { AddStepForm } from "./add-step-form";
 import { FlowStepCard } from "./flow-step-card";
 
 export default async function FlowDetailPage({ params }: { params: Promise<{ flowId: string }> }) {
-  const session = await requireRole("admin", "supervisor");
+  await requireRole("admin");
   const { flowId } = await params;
 
   const flow = await getFlow(flowId);
   if (!flow) notFound();
-
-  const isAdmin = session.role === "admin";
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-8">
@@ -27,7 +25,7 @@ export default async function FlowDetailPage({ params }: { params: Promise<{ flo
         {flow.wabaBusinessName}
       </p>
 
-      {isAdmin && <FlowStatusToggle flowId={flow.id} isActive={flow.isActive} />}
+      <FlowStatusToggle flowId={flow.id} isActive={flow.isActive} />
 
       <section className="flex flex-col gap-4">
         <h2 className="text-sm font-medium">Pasos</h2>
@@ -39,17 +37,15 @@ export default async function FlowDetailPage({ params }: { params: Promise<{ flo
             step={step}
             branches={flow.branches.filter((b) => b.fromStepId === step.id)}
             otherSteps={flow.steps.filter((s) => s.id !== step.id)}
-            isAdmin={isAdmin}
+            isAdmin={true}
           />
         ))}
       </section>
 
-      {isAdmin && (
-        <section className="flex flex-col gap-3 rounded-lg border p-4">
-          <h2 className="text-sm font-medium">Agregar paso</h2>
-          <AddStepForm flowId={flow.id} />
-        </section>
-      )}
+      <section className="flex flex-col gap-3 rounded-lg border p-4">
+        <h2 className="text-sm font-medium">Agregar paso</h2>
+        <AddStepForm flowId={flow.id} />
+      </section>
     </div>
   );
 }

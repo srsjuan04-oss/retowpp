@@ -33,7 +33,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/contacts", label: "Contactos", icon: Users },
   { href: "/templates", label: "Plantillas", icon: ScrollText, roles: ["admin", "supervisor"] },
   { href: "/campaigns", label: "Campañas", icon: Megaphone, roles: ["admin", "supervisor"] },
-  { href: "/flows", label: "Flujos", icon: Workflow, roles: ["admin", "supervisor"] },
+  { href: "/flows", label: "Flujos", icon: Workflow, roles: ["admin"] },
   { href: "/complementos", label: "Complementos", icon: Plug, roles: ["admin", "supervisor"] },
   { href: "/settings/waba", label: "Conexión WABA", icon: Link2, roles: ["admin", "supervisor"] },
   { href: "/stats", label: "Estadísticas", icon: BarChart3, roles: ["admin", "supervisor"] },

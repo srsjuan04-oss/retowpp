@@ -4,18 +4,16 @@ import { listFlows } from "@/lib/flows/queries";
 import { Badge } from "@/components/ui/badge";
 
 export default async function FlowsPage() {
-  const session = await requireRole("admin", "supervisor");
+  await requireRole("admin");
   const flows = await listFlows();
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-8">
       <header className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Flujos</h1>
-        {session.role === "admin" && (
-          <Link href="/flows/new" className="rounded-md border px-4 py-2 text-sm hover:bg-accent">
-            Nuevo flujo
-          </Link>
-        )}
+        <Link href="/flows/new" className="rounded-md border px-4 py-2 text-sm hover:bg-accent">
+          Nuevo flujo
+        </Link>
       </header>
 
       <div className="overflow-hidden rounded-lg border">
