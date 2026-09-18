@@ -204,6 +204,12 @@ export async function processWebhookEvent(
     const payload = event.payload as unknown as WhatsAppWebhookPayload;
     for (const entry of payload.entry ?? []) {
       for (const change of entry.changes ?? []) {
+        // Solo "messages" trae la forma {metadata, messages, statuses} que procesamos abajo.
+        // Otros fields (history, smb_app_state_sync, smb_message_echoes, account_update, etc.,
+        // habilitados para el onboarding de usuarios de la app de WhatsApp Business) tienen un
+        // `value` con forma distinta y todavía no se procesan; ignorarlos evita reintentos
+        // infinitos por errores de forma (ej. metadata.phone_number_id inexistente).
+        if (change.field !== "messages") continue;
         await processInboundMessages(supabase, change.value, aiAgentReplyQueue, flowEngineQueue);
         await processStatusEvents(supabase, change.value);
       }
