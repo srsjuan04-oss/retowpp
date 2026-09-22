@@ -16,6 +16,8 @@ import { findOrCreateConversation } from "../lib/conversations";
 
 type Client = SupabaseClient<Database>;
 
+// Cuánto espera el agente de IA a que el cliente termine de escribir antes de responder.
+const AI_REPLY_DEBOUNCE_MS = 3000;
 const MEDIA_MESSAGE_TYPES = new Set(["image", "document", "audio", "video", "sticker"]);
 const KNOWN_MESSAGE_TYPES = new Set([
   "text",
@@ -139,10 +141,18 @@ async function processInboundMessages(
       // ai_agent_settings, que sigue revisando el propio worker de ai-agent-reply): permite
       // pausar el bot en un número puntual sin tocar los demás ni el resto del procesamiento.
       if (phoneNumberRow.ai_agent_enabled) {
+        // Espera corta antes de responder: si el cliente manda varios mensajes seguidos
+        // ("hola" / "quiero una cita" / "mañana"), solo responde el job del último, con
+        // todos en contexto — un solo mensaje enviado y una sola llamada a Claude.
         await aiAgentReplyQueue.add(
           "reply",
-          { conversationId },
-          { jobId: `ai-agent-reply|${raw.id}`, attempts: 2, backoff: { type: "exponential", delay: 5000 } },
+          { conversationId, inboundWamid: raw.id },
+          {
+            jobId: `ai-agent-reply|${raw.id}`,
+            delay: AI_REPLY_DEBOUNCE_MS,
+            attempts: 2,
+            backoff: { type: "exponential", delay: 5000 },
+          },
         );
       }
       await flowEngineQueue.add(

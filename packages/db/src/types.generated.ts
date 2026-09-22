@@ -72,6 +72,8 @@ export type Database = {
       }
       ai_usage_log: {
         Row: {
+          cache_creation_input_tokens: number
+          cache_read_input_tokens: number
           company_id: string
           conversation_id: string | null
           cost_usd: number
@@ -82,6 +84,8 @@ export type Database = {
           output_tokens: number
         }
         Insert: {
+          cache_creation_input_tokens?: number
+          cache_read_input_tokens?: number
           company_id: string
           conversation_id?: string | null
           cost_usd: number
@@ -92,6 +96,8 @@ export type Database = {
           output_tokens: number
         }
         Update: {
+          cache_creation_input_tokens?: number
+          cache_read_input_tokens?: number
           company_id?: string
           conversation_id?: string | null
           cost_usd?: number
