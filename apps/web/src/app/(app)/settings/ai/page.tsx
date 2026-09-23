@@ -1,5 +1,10 @@
 import { requireRole } from "@/lib/auth/dal";
-import { getAiAgentSettings, getCurrentMonthAiUsageUsd, listMcpServers } from "@/lib/ai-agent/queries";
+import {
+  DEFAULT_AI_MONTHLY_CAP_USD,
+  getAiAgentSettings,
+  getCurrentMonthAiUsageUsd,
+  listMcpServers,
+} from "@/lib/ai-agent/queries";
 import { Badge } from "@/components/ui/badge";
 import { ConnectForm } from "./connect-form";
 import { AgentToggle } from "./agent-toggle";
@@ -13,6 +18,8 @@ export default async function AiAgentSettingsPage() {
     listMcpServers(),
     getCurrentMonthAiUsageUsd(),
   ]);
+  // Sin fila todavía = empresa nueva con la key de la plataforma: aplica el cupo por defecto.
+  const monthlyCapUsd = settings ? settings.aiMonthlyCapUsd : DEFAULT_AI_MONTHLY_CAP_USD;
 
   return (
     <div className="flex flex-1 flex-col gap-8 p-8">
@@ -20,31 +27,34 @@ export default async function AiAgentSettingsPage() {
 
       <section className="flex flex-col gap-4 rounded-lg border p-4">
         <div className="flex items-center gap-3">
-          <h2 className="text-sm font-medium">Conexión con Claude</h2>
-          <Badge variant={settings ? "success" : "neutral"}>{settings ? "conectado" : "sin conectar"}</Badge>
+          <h2 className="text-sm font-medium">Agente de IA</h2>
+          <Badge variant="success">incluido en tu plan</Badge>
         </div>
-        <ConnectForm
-          currentModel={settings?.model}
-          currentSystemPrompt={settings?.systemPrompt ?? undefined}
-          currentAiMonthlyCapUsd={settings?.aiMonthlyCapUsd}
-          currentTopicRestriction={settings?.topicRestriction}
-          currentOffTopicReply={settings?.offTopicReply ?? undefined}
-          isConnected={!!settings}
-        />
-        {settings && (
-          <div className="border-t pt-4">
-            <AgentToggle isEnabled={settings.isEnabled} />
-            <p className="mt-2 text-xs text-muted-foreground">
-              {settings.isEnabled
-                ? "El bot está activo: responderá automáticamente a los mensajes entrantes."
-                : "El bot está inactivo: los mensajes entrantes no reciben respuesta automática."}
-            </p>
-            <p className="mt-3 text-xs text-muted-foreground">
-              Gasto en Claude este mes: <span className="font-medium text-foreground">${monthlyUsageUsd.toFixed(2)}</span>
-              {settings.aiMonthlyCapUsd != null && <> de ${settings.aiMonthlyCapUsd.toFixed(2)}</>}
-            </p>
-          </div>
-        )}
+        <div>
+          <AgentToggle isEnabled={settings?.isEnabled ?? false} />
+          <p className="mt-2 text-xs text-muted-foreground">
+            {settings?.isEnabled
+              ? "El bot está activo: responderá automáticamente a los mensajes entrantes."
+              : "El bot está inactivo: los mensajes entrantes no reciben respuesta automática."}
+          </p>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Uso de IA este mes: <span className="font-medium text-foreground">${monthlyUsageUsd.toFixed(2)}</span>
+            {monthlyCapUsd != null && <> de ${monthlyCapUsd.toFixed(2)} incluidos</>}
+            {monthlyCapUsd != null && (
+              <>
+                {" "}
+                — al llegar al cupo, el bot responde con un mensaje fijo hasta el mes siguiente.
+              </>
+            )}
+          </p>
+        </div>
+        <div className="border-t pt-4">
+          <ConnectForm
+            currentModel={settings?.model}
+            currentSystemPrompt={settings?.systemPrompt ?? undefined}
+            currentOffTopicReply={settings?.offTopicReply ?? undefined}
+          />
+        </div>
       </section>
 
       <section className="flex flex-col gap-4 rounded-lg border p-4">

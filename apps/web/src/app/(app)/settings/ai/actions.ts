@@ -15,87 +15,56 @@ export interface ActionState {
 const ALLOWED_MODELS = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"] as const;
 
 const ConnectSchema = z.object({
-  apiKey: z.string().optional(),
   model: z.enum(ALLOWED_MODELS, { error: "Elige un modelo válido." }),
   systemPrompt: z.string().optional(),
-  aiMonthlyCapUsd: z.string().optional(),
-  topicRestriction: z.boolean(),
   offTopicReply: z.string().optional(),
 });
 
 /**
- * Conecta o actualiza la configuración del agente de IA. Si ya hay una fila y no se
- * escribió una API key nueva, se deja la existente tal cual (no se sobreescribe con
- * vacío) — igual que el patrón de "dejar en blanco para no cambiar" del token de WABA.
+ * Guarda la configuración del agente de IA que la empresa sí puede cambiar (modelo,
+ * instrucciones y respuesta fuera de tema). La API key de Anthropic es la de la plataforma
+ * y el tope mensual / la restricción de tema los define el administrador de plataforma en
+ * /plataforma/empresas — ni siquiera hay permiso de columna para que la empresa los toque.
  */
 export async function connectAnthropic(_prev: ActionState | undefined, formData: FormData): Promise<ActionState> {
   const session = await requireRole("admin");
   if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
 
   const parsed = ConnectSchema.safeParse({
-    apiKey: formData.get("apiKey") || undefined,
     model: formData.get("model"),
     systemPrompt: formData.get("systemPrompt") || undefined,
-    aiMonthlyCapUsd: formData.get("aiMonthlyCapUsd") || undefined,
-    topicRestriction: formData.get("topicRestriction") === "on",
     offTopicReply: formData.get("offTopicReply") || undefined,
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
-
-  let aiMonthlyCapUsd: number | null = null;
-  if (parsed.data.aiMonthlyCapUsd) {
-    aiMonthlyCapUsd = Number(parsed.data.aiMonthlyCapUsd);
-    if (!Number.isFinite(aiMonthlyCapUsd) || aiMonthlyCapUsd <= 0) {
-      return { error: "El tope mensual debe ser un número mayor a 0." };
-    }
-  }
-
-  const encryptionKey = process.env.WABA_TOKEN_ENCRYPTION_KEY;
-  if (!encryptionKey) return { error: "Falta configurar WABA_TOKEN_ENCRYPTION_KEY en el servidor." };
 
   const supabase = await createClient();
   const { data: existing, error: existingError } = await supabase.from("ai_agent_settings").select("id").maybeSingle();
   if (existingError) return { error: existingError.message };
 
-  if (!existing && !parsed.data.apiKey) {
-    return { error: "La API key de Anthropic es obligatoria para conectar por primera vez." };
-  }
-
-  const baseFields = {
+  const fields = {
     model: parsed.data.model,
     system_prompt: parsed.data.systemPrompt ?? null,
-    ai_monthly_cap_usd: aiMonthlyCapUsd,
-    topic_restriction: parsed.data.topicRestriction,
     off_topic_reply: parsed.data.offTopicReply ?? null,
   };
 
-  if (existing) {
-    const update = parsed.data.apiKey
-      ? { ...baseFields, anthropic_api_key_encrypted: encryptWabaToken(parsed.data.apiKey, encryptionKey) }
-      : baseFields;
-    const { error } = await supabase.from("ai_agent_settings").update(update).eq("id", existing.id);
-    if (error) return { error: friendlyDbError(error) };
-  } else {
-    const { error } = await supabase.from("ai_agent_settings").insert({
-      ...baseFields,
-      anthropic_api_key_encrypted: encryptWabaToken(parsed.data.apiKey!, encryptionKey),
-      company_id: session.companyId,
-    });
-    if (error) return { error: friendlyDbError(error) };
-  }
+  const { error } = existing
+    ? await supabase.from("ai_agent_settings").update(fields).eq("id", existing.id)
+    : await supabase.from("ai_agent_settings").insert({ ...fields, company_id: session.companyId });
+  if (error) return { error: friendlyDbError(error) };
 
   revalidatePath("/settings/ai");
   return { success: true };
 }
 
 export async function setAgentEnabled(isEnabled: boolean): Promise<ActionState> {
-  await requireRole("admin");
+  const session = await requireRole("admin");
+  if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
   const supabase = await createClient();
 
   const { data: existing } = await supabase.from("ai_agent_settings").select("id").maybeSingle();
-  if (!existing) return { error: "Conecta primero la API key de Anthropic." };
-
-  const { error } = await supabase.from("ai_agent_settings").update({ is_enabled: isEnabled }).eq("id", existing.id);
+  const { error } = existing
+    ? await supabase.from("ai_agent_settings").update({ is_enabled: isEnabled }).eq("id", existing.id)
+    : await supabase.from("ai_agent_settings").insert({ company_id: session.companyId, is_enabled: isEnabled });
   if (error) return { error: friendlyDbError(error) };
 
   revalidatePath("/settings/ai");

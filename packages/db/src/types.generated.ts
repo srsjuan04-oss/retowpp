@@ -23,7 +23,7 @@ export type Database = {
       ai_agent_settings: {
         Row: {
           ai_monthly_cap_usd: number | null
-          anthropic_api_key_encrypted: string
+          anthropic_api_key_encrypted: string | null
           company_id: string
           created_at: string
           id: string
@@ -36,7 +36,7 @@ export type Database = {
         }
         Insert: {
           ai_monthly_cap_usd?: number | null
-          anthropic_api_key_encrypted: string
+          anthropic_api_key_encrypted?: string | null
           company_id: string
           created_at?: string
           id?: string
@@ -49,7 +49,7 @@ export type Database = {
         }
         Update: {
           ai_monthly_cap_usd?: number | null
-          anthropic_api_key_encrypted?: string
+          anthropic_api_key_encrypted?: string | null
           company_id?: string
           created_at?: string
           id?: string

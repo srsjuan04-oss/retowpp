@@ -3,6 +3,7 @@ import * as z from "zod";
 import { encryptWabaToken } from "@reto-whatsapp/core";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isAuthorizedSalonProRequest } from "@/lib/integrations/salonpro";
+import { SALONPRO_DEFAULT_SYSTEM_PROMPT } from "@/lib/integrations/salonpro-default-prompt";
 
 const ProvisionSchema = z.object({
   organization_id: z.uuid(),
@@ -15,12 +16,15 @@ const ProvisionSchema = z.object({
 });
 
 const MCP_SERVER_NAME = "SalonPro";
+// Cupo mensual de IA con la API key de la plataforma (se ajusta en /plataforma/empresas).
+const DEFAULT_AI_MONTHLY_CAP_USD = 10;
 
 /**
  * Alta automática de un cliente que compró un plan en SalonPro: crea la empresa, su usuario
  * admin con la MISMA contraseña que eligió en el checkout (llega una sola vez, por HTTPS, y
- * no se guarda en ningún lado — Supabase Auth solo guarda su hash) y deja conectado el
- * servidor MCP de su organización de SalonPro para el agente de IA.
+ * no se guarda en ningún lado — Supabase Auth solo guarda su hash), deja conectado el
+ * servidor MCP de su organización de SalonPro y el agente de IA configurado con la API key
+ * de la plataforma y su cupo mensual.
  *
  * Idempotente por organization_id: si SalonPro reintenta, no se duplica nada. Si el correo
  * ya tiene cuenta acá, NO se toca su contraseña ni su empresa: se responde 409 y el alta de
@@ -86,13 +90,31 @@ export async function POST(request: NextRequest) {
     else mcpConnected = true;
   }
 
+  // Agente de IA listo para usar con la API key de la plataforma (sin key propia), con cupo
+  // mensual y restricción de tema. Queda encendido: empieza a responder apenas la empresa
+  // conecte su número de WhatsApp.
+  const { error: aiError } = await supabase.from("ai_agent_settings").insert({
+    company_id: company.id,
+    is_enabled: true,
+    model: "claude-sonnet-5",
+    system_prompt: SALONPRO_DEFAULT_SYSTEM_PROMPT,
+    ai_monthly_cap_usd: DEFAULT_AI_MONTHLY_CAP_USD,
+    topic_restriction: true,
+  });
+  if (aiError) console.error("[salonpro/provision] no se pudo configurar el agente de IA", aiError);
+
   await supabase.from("audit_log").insert({
     company_id: company.id,
     actor_id: null,
     action: "company.provisioned_from_salonpro",
     entity_type: "company",
     entity_id: company.id,
-    metadata: { salonpro_organization_id: input.organization_id, email: input.email, mcp_connected: mcpConnected },
+    metadata: {
+      salonpro_organization_id: input.organization_id,
+      email: input.email,
+      mcp_connected: mcpConnected,
+      ai_agent_configured: !aiError,
+    },
   });
 
   return NextResponse.json({ status: "created", company_id: company.id, mcp_connected: mcpConnected }, { status: 201 });

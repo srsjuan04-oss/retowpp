@@ -80,3 +80,22 @@ export async function setCompanyActive(companyId: string, isActive: boolean): Pr
   if (error) throw error;
   revalidatePath("/plataforma/empresas");
 }
+
+/**
+ * Cupo mensual de IA de una empresa (lo que puede gastar de la API key de la plataforma).
+ * Solo el administrador de plataforma: la empresa no tiene permiso de columna sobre
+ * ai_monthly_cap_usd, así que esto va con el service role.
+ */
+export async function setCompanyAiCap(companyId: string, capUsd: number): Promise<{ error?: string }> {
+  await requirePlatformAdmin();
+  if (!Number.isFinite(capUsd) || capUsd < 0) return { error: "El cupo debe ser un número mayor o igual a 0." };
+
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("ai_agent_settings")
+    .upsert({ company_id: companyId, ai_monthly_cap_usd: capUsd }, { onConflict: "company_id" });
+  if (error) return { error: error.message };
+
+  revalidatePath("/plataforma/empresas");
+  return {};
+}

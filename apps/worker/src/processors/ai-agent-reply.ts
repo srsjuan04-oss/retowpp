@@ -48,6 +48,9 @@ const CLASSIFIER_HISTORY_TURNS = 6;
 
 const DEFAULT_OFF_TOPIC_REPLY =
   "Solo puedo ayudarte con temas de este negocio (agendar, consultar o cambiar una cita, servicios, horarios). Para otras consultas, un asesor te puede ayudar.";
+// Empresas sin API key propia usan la de la plataforma: siempre con tope (si por algún motivo
+// la fila no lo trae) y con restricción de tema, porque el gasto es de la plataforma.
+const DEFAULT_PLATFORM_CAP_USD = 10;
 const DEFAULT_CAP_REACHED_REPLY = "En este momento no puedo responder automáticamente — un asesor te va a contactar pronto.";
 
 /** USD por millón de tokens. Si aparece un modelo nuevo no listado, se cobra como Sonnet
@@ -456,12 +459,16 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
   if (!settings || !settings.is_enabled) return;
   if (!phoneNumberResult.data.ai_agent_enabled) return;
 
+  const usesPlatformKey = !settings.anthropic_api_key_encrypted;
+  const monthlyCapUsd = settings.ai_monthly_cap_usd ?? (usesPlatformKey ? DEFAULT_PLATFORM_CAP_USD : null);
+  const topicRestriction = settings.topic_restriction || usesPlatformKey;
+
   if (!assertCanContact(contact.consent_status).allowed) return;
   if (!assertCanSendOutbound({ kind: "session", lastInboundAt: conversation.last_inbound_at }).allowed) return;
 
   const [usedUsd, history, mcpResult] = await Promise.all([
-    // Tope de gasto mensual (opt-in, null = sin tope).
-    settings.ai_monthly_cap_usd != null ? getMonthlyUsageUsd(supabase, conversation.company_id) : Promise.resolve(0),
+    // Tope de gasto mensual (obligatorio con la key de la plataforma; con key propia, null = sin tope).
+    monthlyCapUsd != null ? getMonthlyUsageUsd(supabase, conversation.company_id) : Promise.resolve(0),
     buildConversationHistory(supabase, conversationId),
     supabase
       .from("mcp_servers")
@@ -471,7 +478,7 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
   ]);
   if (mcpResult.error) throw mcpResult.error;
 
-  if (settings.ai_monthly_cap_usd != null && usedUsd >= settings.ai_monthly_cap_usd) {
+  if (monthlyCapUsd != null && usedUsd >= monthlyCapUsd) {
     await sendCannedReplyOnce(supabase, conversationId, conversation.phone_number_id, contact.wa_id, DEFAULT_CAP_REACHED_REPLY);
     return;
   }
@@ -480,7 +487,11 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
   const encryptionKey = process.env.WABA_TOKEN_ENCRYPTION_KEY;
   if (!encryptionKey) throw new Error("Falta configurar WABA_TOKEN_ENCRYPTION_KEY en el servidor.");
 
-  const anthropic = new Anthropic({ apiKey: decryptWabaToken(settings.anthropic_api_key_encrypted, encryptionKey) });
+  const apiKey = settings.anthropic_api_key_encrypted
+    ? decryptWabaToken(settings.anthropic_api_key_encrypted, encryptionKey)
+    : process.env.PLATFORM_ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("Falta configurar PLATFORM_ANTHROPIC_API_KEY en el worker.");
+  const anthropic = new Anthropic({ apiKey });
   const businessDescription = settings.system_prompt || DEFAULT_SYSTEM_PROMPT;
 
   const mcpServers: McpServerConnection[] = (mcpResult.data ?? []).map((s) => ({
@@ -526,7 +537,7 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
   // "unhandled rejection"; el `await replyPromise` de abajo igual lo relanza.
   replyPromise.catch(() => null);
 
-  if (settings.topic_restriction) {
+  if (topicRestriction) {
     let onTopic = true;
     try {
       const classification = await classifyOnTopic(anthropic, businessDescription, history);

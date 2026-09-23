@@ -1,6 +1,10 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 
+/** Cupo mensual de IA por defecto para empresas que usan la API key de la plataforma
+ * (mismo valor que el default de la columna y que el worker). */
+export const DEFAULT_AI_MONTHLY_CAP_USD = 10;
+
 export interface AiAgentSettings {
   id: string;
   isEnabled: boolean;
