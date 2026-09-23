@@ -298,7 +298,16 @@ function formatUsd(amount: number): string {
  * log_customer_note, que se declara como herramienta propia para agregarle al resumen el
  * costo de Claude de la conversación antes de mandarlo al servidor MCP.
  */
-async function generateReply(ctx: ReplyContext): Promise<{ text: string; usedTools: boolean } | null> {
+interface ReplyStats {
+  claudeMs: number;
+  claudeCalls: number;
+  mcpToolCalls: number;
+  cacheReadTokens: number;
+}
+
+async function generateReply(
+  ctx: ReplyContext,
+): Promise<{ text: string; usedTools: boolean; stats: ReplyStats } | null> {
   const noteTool = ctx.mcpServers.length > 0 ? await findNoteTool(ctx.mcpServers) : null;
 
   const tools: BetaToolUnion[] = ctx.mcpServers.map((s) => ({
@@ -318,8 +327,10 @@ async function generateReply(ctx: ReplyContext): Promise<{ text: string; usedToo
   const messages: BetaMessageParam[] = [...ctx.history];
   const texts: string[] = [];
   let usedTools = false;
+  const stats: ReplyStats = { claudeMs: 0, claudeCalls: 0, mcpToolCalls: 0, cacheReadTokens: 0 };
 
   for (let turn = 0; turn < MAX_AGENT_TURNS; turn++) {
+    const callStartedAt = Date.now();
     const response = await ctx.anthropic.beta.messages.create(
       {
         model: ctx.model,
@@ -342,6 +353,10 @@ async function generateReply(ctx: ReplyContext): Promise<{ text: string; usedToo
       },
       { signal: ctx.signal },
     );
+    stats.claudeMs += Date.now() - callStartedAt;
+    stats.claudeCalls += 1;
+    stats.mcpToolCalls += response.content.filter((b) => b.type === "mcp_tool_use").length;
+    stats.cacheReadTokens += response.usage.cache_read_input_tokens ?? 0;
     await logUsage(ctx.supabase, ctx.companyId, ctx.conversationId, ctx.model, response.usage);
 
     if ((response.stop_reason as string) === "refusal") return null; // el clasificador de seguridad rechazó la respuesta; no se envía nada.
@@ -393,7 +408,7 @@ async function generateReply(ctx: ReplyContext): Promise<{ text: string; usedToo
   }
 
   const replyText = texts.join("\n").trim();
-  return replyText ? { text: replyText, usedTools } : null;
+  return replyText ? { text: replyText, usedTools, stats } : null;
 }
 
 /**
@@ -403,6 +418,7 @@ async function generateReply(ctx: ReplyContext): Promise<{ text: string; usedToo
  * más nuevo contesta todo en un solo mensaje — menos mensajes enviados y menos llamadas a Claude.
  */
 export async function processAiAgentReply(supabase: Client, conversationId: string, inboundWamid?: string): Promise<void> {
+  const startedAt = Date.now();
   const [conversationResult, latestWamid] = await Promise.all([
     supabase
       .from("conversations")
@@ -489,6 +505,7 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
   // El clasificador de tema (opt-in) corre en paralelo con la respuesta en vez de antes, para
   // no sumar su latencia a cada mensaje; si dice que es fuera de tema, se cancela la respuesta.
   const controller = new AbortController();
+  const prepMs = Date.now() - startedAt;
   const replyPromise = generateReply({
     supabase,
     anthropic,
@@ -538,7 +555,16 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
     return;
   }
 
+  const sendStartedAt = Date.now();
   await sendAgentReply(supabase, conversationId, conversation.phone_number_id, contact.wa_id, reply.text);
+
+  // Medición por etapas para saber dónde se va el tiempo de cada respuesta (logs de Railway).
+  const { stats } = reply;
+  console.log(
+    `[ai-agent-reply] conv ${conversationId}: total ${Date.now() - startedAt}ms | prep ${prepMs}ms | ` +
+      `claude ${stats.claudeMs}ms (${stats.claudeCalls} llamadas, ${stats.mcpToolCalls} herramientas MCP, ` +
+      `${stats.cacheReadTokens} tokens de caché) | envío ${Date.now() - sendStartedAt}ms`,
+  );
 }
 
 export function createAiAgentReplyWorker(connection: ConnectionOptions): Worker {
