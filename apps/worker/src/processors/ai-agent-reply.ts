@@ -431,7 +431,7 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
   const conversation = conversationResult.data;
   if (inboundWamid && latestWamid && latestWamid !== inboundWamid) return;
 
-  const [settingsResult, phoneNumberResult, contactResult] = await Promise.all([
+  const [settingsResult, phoneNumberResult, contactResult, companyResult] = await Promise.all([
     supabase
       .from("ai_agent_settings")
       .select(
@@ -443,10 +443,14 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
     // en un número puntual —p. ej. uno personal de prueba— sin afectar los demás.
     supabase.from("phone_numbers").select("ai_agent_enabled").eq("id", conversation.phone_number_id).single(),
     supabase.from("contacts").select("wa_id, consent_status").eq("id", conversation.contact_id).single(),
+    // Empresa suspendida (p. ej. suscripción de SalonPro cancelada): el bot no responde.
+    supabase.from("companies").select("is_active").eq("id", conversation.company_id).single(),
   ]);
   if (settingsResult.error) throw settingsResult.error;
   if (phoneNumberResult.error) throw phoneNumberResult.error;
   if (contactResult.error) throw contactResult.error;
+  if (companyResult.error) throw companyResult.error;
+  if (!companyResult.data.is_active) return;
   const settings = settingsResult.data;
   const contact = contactResult.data;
   if (!settings || !settings.is_enabled) return;

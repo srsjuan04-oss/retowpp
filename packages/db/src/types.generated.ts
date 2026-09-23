@@ -469,18 +469,21 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          salonpro_organization_id: string | null
         }
         Insert: {
           created_at?: string
           id?: string
           is_active?: boolean
           name: string
+          salonpro_organization_id?: string | null
         }
         Update: {
           created_at?: string
           id?: string
           is_active?: boolean
           name?: string
+          salonpro_organization_id?: string | null
         }
         Relationships: []
       }
