@@ -629,6 +629,7 @@ export type Database = {
       }
       conversations: {
         Row: {
+          ai_agent_paused: boolean
           assigned_team_id: string | null
           assigned_to: string | null
           company_id: string
@@ -643,6 +644,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ai_agent_paused?: boolean
           assigned_team_id?: string | null
           assigned_to?: string | null
           company_id: string
@@ -657,6 +659,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ai_agent_paused?: boolean
           assigned_team_id?: string | null
           assigned_to?: string | null
           company_id?: string

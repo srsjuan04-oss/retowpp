@@ -1,14 +1,16 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useTransition } from "react";
+import { useActionState, useEffect, useOptimistic, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { isWithinServiceWindow } from "@reto-whatsapp/core";
+import { Bot, BotOff } from "lucide-react";
 import {
   assignConversation,
   closeConversation,
   deleteConversation,
   markConversationRead,
   sendMessage,
+  setConversationAiPaused,
   type SendMessageState,
 } from "@/app/(app)/inbox/actions";
 import { Button } from "@/components/ui/button";
@@ -46,6 +48,8 @@ export function ConversationThread({
   const bottomRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const [deleting, startDeleteTransition] = useTransition();
+  const [aiPaused, setOptimisticAiPaused] = useOptimistic(conversation.aiAgentPaused);
+  const [, startAiTransition] = useTransition();
 
   useEffect(() => {
     void markConversationRead(conversation.id);
@@ -70,6 +74,25 @@ export function ConversationThread({
           </Badge>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            title={
+              aiPaused
+                ? "La IA no responde en esta conversación. Clic para reactivarla."
+                : "La IA responde en esta conversación. Clic para pausarla y atender tú."
+            }
+            className={cn(aiPaused && "border-amber-500/40 bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:text-amber-400")}
+            onClick={() =>
+              startAiTransition(async () => {
+                setOptimisticAiPaused(!aiPaused);
+                await setConversationAiPaused(conversation.id, !aiPaused);
+              })
+            }
+          >
+            {aiPaused ? <BotOff className="size-4" /> : <Bot className="size-4" />}
+            {aiPaused ? "IA pausada" : "IA activa"}
+          </Button>
           <select
             defaultValue={conversation.assignedTo ?? ""}
             onChange={(e) => void assignConversation(conversation.id, e.target.value || null)}

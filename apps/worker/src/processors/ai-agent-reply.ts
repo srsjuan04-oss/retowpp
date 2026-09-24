@@ -425,13 +425,15 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
   const [conversationResult, latestWamid] = await Promise.all([
     supabase
       .from("conversations")
-      .select("contact_id, phone_number_id, last_inbound_at, company_id")
+      .select("contact_id, phone_number_id, last_inbound_at, company_id, ai_agent_paused")
       .eq("id", conversationId)
       .single(),
     inboundWamid ? getLatestInboundTextWamid(supabase, conversationId) : Promise.resolve(null),
   ]);
   if (conversationResult.error) throw conversationResult.error;
   const conversation = conversationResult.data;
+  // Pausa por conversación: un agente humano tomó este chat desde la bandeja.
+  if (conversation.ai_agent_paused) return;
   if (inboundWamid && latestWamid && latestWamid !== inboundWamid) return;
 
   const [settingsResult, phoneNumberResult, contactResult, companyResult] = await Promise.all([

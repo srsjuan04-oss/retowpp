@@ -126,6 +126,8 @@ export async function listConversations(): Promise<ConversationListItem[]> {
 export interface ConversationDetail extends ConversationListItem {
   phoneNumberRowId: string;
   contactConsentStatus: ConsentStatus;
+  /** Agente de IA pausado solo en esta conversación (un humano la tomó). */
+  aiAgentPaused: boolean;
 }
 
 export async function getConversation(conversationId: string): Promise<ConversationDetail | null> {
@@ -134,7 +136,7 @@ export async function getConversation(conversationId: string): Promise<Conversat
   const { data: conversation } = await supabase
     .from("conversations")
     .select(
-      "id, status, assigned_to, assigned_team_id, last_inbound_at, last_outbound_at, last_read_at, contact_id, phone_number_id",
+      "id, status, assigned_to, assigned_team_id, last_inbound_at, last_outbound_at, last_read_at, contact_id, phone_number_id, ai_agent_paused",
     )
     .eq("id", conversationId)
     .maybeSingle();
@@ -157,6 +159,7 @@ export async function getConversation(conversationId: string): Promise<Conversat
     isUnread: computeIsUnread(conversation.last_inbound_at, conversation.last_read_at),
     phoneNumberRowId: conversation.phone_number_id,
     contactConsentStatus: contact.consent_status,
+    aiAgentPaused: conversation.ai_agent_paused,
     contact: { id: contact.id, displayName: contact.display_name, waId: contact.wa_id },
   };
 }

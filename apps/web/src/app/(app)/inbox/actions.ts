@@ -227,6 +227,19 @@ export async function assignConversation(conversationId: string, profileId: stri
   revalidatePath(`/inbox/${conversationId}`);
 }
 
+/**
+ * Pausa o reanuda el agente de IA solo en esta conversación, para que un agente humano la
+ * atienda sin que el bot le conteste encima. Lo revisa el worker de ai-agent-reply antes de
+ * cada respuesta; no afecta el resto de conversaciones ni el interruptor general.
+ */
+export async function setConversationAiPaused(conversationId: string, paused: boolean): Promise<void> {
+  await verifySession();
+  const supabase = await createClient();
+  const { error } = await supabase.from("conversations").update({ ai_agent_paused: paused }).eq("id", conversationId);
+  if (error) throw error;
+  revalidatePath(`/inbox/${conversationId}`);
+}
+
 export async function closeConversation(conversationId: string): Promise<void> {
   await verifySession();
   const supabase = await createClient();
