@@ -37,7 +37,8 @@ const SINGLE_MESSAGE_CONTEXT =
   "\n\n## UN SOLO MENSAJE POR TURNO (regla fija, no editable desde la configuración)\n\nCada mensaje de WhatsApp que envías tiene costo. Responde TODO lo que el cliente pidió en un único mensaje (si escribió varios mensajes seguidos, contéstalos juntos). No anuncies que vas a consultar algo (\"déjame revisar\", \"un momento\"): consulta las herramientas primero y responde ya con el resultado.";
 
 // Herramienta MCP que el worker ejecuta por su cuenta (en vez del conector de Anthropic) para
-// poder agregarle al resumen el costo real de Claude de la conversación.
+// completarle el teléfono del cliente si el modelo no lo mandó. El costo de Claude NO va en la
+// nota: la ve el salón en SalonPro y el consumo de IA es interno (solo /plataforma/empresas).
 const NOTE_TOOL_NAME = "log_customer_note";
 
 // Modelo fijo para el clasificador de tema: siempre el más barato, sin importar cuál tenga
@@ -178,19 +179,6 @@ async function getMonthlyUsageUsd(supabase: Client, companyId: string): Promise<
   return (data ?? []).reduce((sum, row) => sum + Number(row.cost_usd), 0);
 }
 
-/** Gasto en Claude de esta conversación dentro de la misma ventana que ve el modelo (24h),
- * incluidas las llamadas de la respuesta en curso (se registran antes de ejecutar la nota). */
-async function getConversationUsageUsd(supabase: Client, conversationId: string): Promise<number> {
-  const windowStart = new Date(Date.now() - HISTORY_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
-    .from("ai_usage_log")
-    .select("cost_usd")
-    .eq("conversation_id", conversationId)
-    .gte("created_at", windowStart);
-  if (error) throw error;
-  return (data ?? []).reduce((sum, row) => sum + Number(row.cost_usd), 0);
-}
-
 /** Manda un mensaje de texto del agente (respuesta real, o uno de los mensajes fijos de
  * tope/fuera de tema) y deja el mismo rastro en `messages`/`conversations` en cualquier caso. */
 async function sendAgentReply(
@@ -273,7 +261,7 @@ interface ReplyContext {
 }
 
 /** Busca qué servidor MCP activo expone log_customer_note. Si falla el listado, se sigue sin
- * interceptar la nota (el conector de Anthropic la ejecuta como antes, sin el costo). */
+ * interceptar la nota (el conector de Anthropic la ejecuta directamente). */
 async function findNoteTool(
   servers: McpServerConnection[],
 ): Promise<{ server: McpServerConnection; tool: McpToolDefinition } | null> {
@@ -291,15 +279,12 @@ async function findNoteTool(
   return results.find((r) => r !== null) ?? null;
 }
 
-function formatUsd(amount: number): string {
-  return `US$${amount.toFixed(amount < 1 ? 4 : 2)}`;
-}
 
 /**
  * Genera la respuesta del agente. La conexión MCP la resuelve Anthropic server-side (las
  * llamadas a las herramientas ocurren dentro de la misma respuesta); la única excepción es
- * log_customer_note, que se declara como herramienta propia para agregarle al resumen el
- * costo de Claude de la conversación antes de mandarlo al servidor MCP.
+ * log_customer_note, que se declara como herramienta propia para completarle el teléfono del
+ * cliente antes de mandarla al servidor MCP.
  */
 interface ReplyStats {
   claudeMs: number;
@@ -381,12 +366,10 @@ async function generateReply(
     if (noteCalls.length === 0) break;
     if (ctx.signal.aborted) return null;
 
-    const costUsd = await getConversationUsageUsd(ctx.supabase, ctx.conversationId);
     const toolResults = await Promise.all(
       noteCalls.map(async (call) => {
         const input = { ...(call.input as Record<string, unknown>) };
         if (!input.phone && !input.customer_id) input.phone = ctx.customerPhone;
-        input.summary = `${String(input.summary ?? "").trim()}\n\nCosto IA (Claude) de esta conversación: ${formatUsd(costUsd)}`;
         try {
           const result = await callMcpTool(noteTool.server, NOTE_TOOL_NAME, input);
           return { type: "tool_result" as const, tool_use_id: call.id, content: result.text, is_error: result.isError };

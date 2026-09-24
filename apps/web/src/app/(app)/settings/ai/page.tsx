@@ -1,10 +1,5 @@
 import { requireRole } from "@/lib/auth/dal";
-import {
-  DEFAULT_AI_MONTHLY_CAP_USD,
-  getAiAgentSettings,
-  getCurrentMonthAiUsageUsd,
-  listMcpServers,
-} from "@/lib/ai-agent/queries";
+import { getAiAgentSettings, listMcpServers } from "@/lib/ai-agent/queries";
 import { Badge } from "@/components/ui/badge";
 import { ConnectForm } from "./connect-form";
 import { AgentToggle } from "./agent-toggle";
@@ -13,13 +8,9 @@ import { McpServerList } from "./mcp-server-list";
 
 export default async function AiAgentSettingsPage() {
   await requireRole("admin");
-  const [settings, mcpServers, monthlyUsageUsd] = await Promise.all([
-    getAiAgentSettings(),
-    listMcpServers(),
-    getCurrentMonthAiUsageUsd(),
-  ]);
-  // Sin fila todavía = empresa nueva con la key de la plataforma: aplica el cupo por defecto.
-  const monthlyCapUsd = settings ? settings.aiMonthlyCapUsd : DEFAULT_AI_MONTHLY_CAP_USD;
+  // El consumo y el cupo de IA no se muestran aquí: son un manejo interno de la plataforma
+  // (se ven solo en /plataforma/empresas).
+  const [settings, mcpServers] = await Promise.all([getAiAgentSettings(), listMcpServers()]);
 
   return (
     <div className="flex flex-1 flex-col gap-8 p-8">
@@ -36,16 +27,6 @@ export default async function AiAgentSettingsPage() {
             {settings?.isEnabled
               ? "El bot está activo: responderá automáticamente a los mensajes entrantes."
               : "El bot está inactivo: los mensajes entrantes no reciben respuesta automática."}
-          </p>
-          <p className="mt-3 text-xs text-muted-foreground">
-            Uso de IA este mes: <span className="font-medium text-foreground">${monthlyUsageUsd.toFixed(2)}</span>
-            {monthlyCapUsd != null && <> de ${monthlyCapUsd.toFixed(2)} incluidos</>}
-            {monthlyCapUsd != null && (
-              <>
-                {" "}
-                — al llegar al cupo, el bot responde con un mensaje fijo hasta el mes siguiente.
-              </>
-            )}
           </p>
         </div>
         <div className="border-t pt-4">

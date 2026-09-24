@@ -2,7 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 
 /** Cupo mensual de IA por defecto para empresas que usan la API key de la plataforma
- * (mismo valor que el default de la columna y que el worker). */
+ * (mismo valor que el default de la columna y que el worker). Solo lo muestra /plataforma. */
 export const DEFAULT_AI_MONTHLY_CAP_USD = 10;
 
 export interface AiAgentSettings {
@@ -10,17 +10,18 @@ export interface AiAgentSettings {
   isEnabled: boolean;
   model: string;
   systemPrompt: string | null;
-  aiMonthlyCapUsd: number | null;
   topicRestriction: boolean;
   offTopicReply: string | null;
 }
 
-/** Nunca selecciona `anthropic_api_key_encrypted`: la columna ni siquiera es legible para `authenticated` (ver migración). */
+/** Nunca selecciona `anthropic_api_key_encrypted` ni `ai_monthly_cap_usd`: el consumo y el cupo de IA
+ * son internos (solo /plataforma/empresas, con service role) y esas columnas ni siquiera son
+ * legibles para `authenticated` (ver migraciones). */
 export async function getAiAgentSettings(): Promise<AiAgentSettings | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("ai_agent_settings")
-    .select("id, is_enabled, model, system_prompt, ai_monthly_cap_usd, topic_restriction, off_topic_reply")
+    .select("id, is_enabled, model, system_prompt, topic_restriction, off_topic_reply")
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
@@ -29,24 +30,9 @@ export async function getAiAgentSettings(): Promise<AiAgentSettings | null> {
     isEnabled: data.is_enabled,
     model: data.model,
     systemPrompt: data.system_prompt,
-    aiMonthlyCapUsd: data.ai_monthly_cap_usd,
     topicRestriction: data.topic_restriction,
     offTopicReply: data.off_topic_reply,
   };
-}
-
-/** Gasto real en Claude (respuestas + clasificador de tema) desde el 1° del mes en curso (UTC). */
-export async function getCurrentMonthAiUsageUsd(): Promise<number> {
-  const supabase = await createClient();
-  const monthStart = new Date();
-  monthStart.setUTCDate(1);
-  monthStart.setUTCHours(0, 0, 0, 0);
-  const { data, error } = await supabase
-    .from("ai_usage_log")
-    .select("cost_usd")
-    .gte("created_at", monthStart.toISOString());
-  if (error) throw error;
-  return (data ?? []).reduce((sum, row) => sum + Number(row.cost_usd), 0);
 }
 
 export interface McpServerItem {
