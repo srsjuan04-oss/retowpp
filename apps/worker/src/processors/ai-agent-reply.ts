@@ -40,6 +40,9 @@ const SINGLE_MESSAGE_CONTEXT =
 // completarle el teléfono del cliente si el modelo no lo mandó. El costo de Claude NO va en la
 // nota: la ve el salón en SalonPro y el consumo de IA es interno (solo /plataforma/empresas).
 const NOTE_TOOL_NAME = "log_customer_note";
+// Herramienta MCP con la que el worker busca al cliente por su WhatsApp antes de responder, para
+// que el agente no le vuelva a pedir nombre y correo a alguien que ya está registrado.
+const CUSTOMER_LOOKUP_TOOL_NAME = "find_or_create_customer";
 
 // Modelo fijo para el clasificador de tema: siempre el más barato, sin importar cuál tenga
 // configurado la empresa para responder de verdad — es solo un filtro de sí/no.
@@ -115,6 +118,32 @@ async function buildConversationHistory(
     turns.push({ role: m.direction === "inbound" ? "user" : "assistant", content: content.body });
   }
   return { turns, actions };
+}
+
+/** Nombre y correo del cliente si ya está registrado en el sistema del negocio (vía MCP). Solo
+ * busca: sin `name`, find_or_create_customer no crea a nadie (responde error de "cliente
+ * nuevo"). Cualquier falla se trata como cliente desconocido — el agente pedirá los datos. */
+async function lookupKnownCustomer(
+  servers: McpServerConnection[],
+  phone: string,
+): Promise<{ name: string | null; email: string | null } | null> {
+  if (servers.length === 0) return null;
+  const lookupTool = await findMcpTool(servers, CUSTOMER_LOOKUP_TOOL_NAME);
+  if (!lookupTool) return null;
+  try {
+    const result = await callMcpTool(lookupTool.server, CUSTOMER_LOOKUP_TOOL_NAME, { phone });
+    if (result.isError) return null;
+    const customer = JSON.parse(result.text) as { name?: string | null; email?: string | null };
+    return customer.name || customer.email ? { name: customer.name ?? null, email: customer.email ?? null } : null;
+  } catch (error) {
+    console.error("[ai-agent-reply] no se pudo buscar al cliente", error);
+    return null;
+  }
+}
+
+function formatKnownCustomerContext(customer: { name: string | null; email: string | null } | null): string {
+  if (!customer) return "";
+  return `\n\n## CLIENTE YA REGISTRADO (dato real del sistema)\n\nNombre: ${customer.name ?? "(sin registrar)"}\nCorreo: ${customer.email ?? "(sin registrar)"}\n\nNo le vuelvas a pedir los datos que ya aparecen aquí: salúdalo por su nombre y úsalos directamente al agendar (pasa el correo como customer_email). Solo pide lo que diga "(sin registrar)", o cámbialos si el cliente te da otros.`;
 }
 
 function formatAgentActionsContext(actions: AgentAction[]): string {
@@ -332,15 +361,16 @@ interface ReplyContext {
   signal: AbortSignal;
 }
 
-/** Busca qué servidor MCP activo expone log_customer_note. Si falla el listado, se sigue sin
- * interceptar la nota (el conector de Anthropic la ejecuta directamente). */
-async function findNoteTool(
+/** Busca qué servidor MCP activo expone la herramienta `toolName` (el listado se cachea en
+ * mcp-client). Si falla el listado de un servidor, se sigue como si no la tuviera. */
+async function findMcpTool(
   servers: McpServerConnection[],
+  toolName: string,
 ): Promise<{ server: McpServerConnection; tool: McpToolDefinition } | null> {
   const results = await Promise.all(
     servers.map(async (server) => {
       try {
-        const tool = (await listMcpTools(server)).find((t) => t.name === NOTE_TOOL_NAME);
+        const tool = (await listMcpTools(server)).find((t) => t.name === toolName);
         return tool ? { server, tool } : null;
       } catch (error) {
         console.error(`[ai-agent-reply] no se pudo listar herramientas de ${server.name}`, error);
@@ -368,7 +398,7 @@ interface ReplyStats {
 async function generateReply(
   ctx: ReplyContext,
 ): Promise<{ text: string; usedTools: boolean; actions: AgentAction[]; stats: ReplyStats } | null> {
-  const noteTool = ctx.mcpServers.length > 0 ? await findNoteTool(ctx.mcpServers) : null;
+  const noteTool = ctx.mcpServers.length > 0 ? await findMcpTool(ctx.mcpServers, NOTE_TOOL_NAME) : null;
 
   const tools: BetaToolUnion[] = ctx.mcpServers.map((s) => ({
     type: "mcp_toolset" as const,
@@ -563,6 +593,7 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
 
   const now = new Date();
   const currentDateContext = `## FECHA Y HORA ACTUALES (dato real, no lo asumas nunca)\n\nHoy es ${now.toLocaleDateString("es-CO", { timeZone: "America/Bogota", weekday: "long", year: "numeric", month: "long", day: "numeric" })}, son las ${now.toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" })} hora de Colombia. Usa este dato como única fuente de verdad para resolver cualquier fecha relativa ("hoy", "mañana", "el viernes", "el 13 de agosto") y para construir el año en cualquier YYYY-MM-DD que envíes a una herramienta MCP.`;
+  const knownCustomer = await lookupKnownCustomer(mcpServers, contact.wa_id);
   const customerContext = `\n\n## NÚMERO DE WHATSAPP DEL CLIENTE (dato real, no lo asumas ni lo inventes)\n\nEste cliente te está escribiendo desde el número ${contact.wa_id}. Úsalo como "phone" en las herramientas MCP (list_customer_appointments, reschedule_appointment, cancel_appointment, create_appointment, log_customer_note) para buscar o registrar sus citas — no le pidas su número salvo que quiera agendar o registrar a nombre de otra persona.`;
   // Lo fijo va primero y con marca de caché (junto con las definiciones de herramientas, que
   // van antes del system): se cobra ~10% en las siguientes llamadas y responde más rápido. La
@@ -573,7 +604,7 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
       text: businessDescription + NO_MARKDOWN_CONTEXT + SINGLE_MESSAGE_CONTEXT,
       cache_control: { type: "ephemeral" },
     },
-    { type: "text", text: currentDateContext + customerContext + formatAgentActionsContext(pastActions) },
+    { type: "text", text: currentDateContext + customerContext + formatKnownCustomerContext(knownCustomer) + formatAgentActionsContext(pastActions) },
   ];
 
   // El clasificador de tema (opt-in) corre en paralelo con la respuesta en vez de antes, para
