@@ -8,7 +8,13 @@ import type {
   BetaToolUseBlock,
   BetaUsage,
 } from "@anthropic-ai/sdk/resources/beta/messages/messages";
-import { AI_AGENT_REPLY_QUEUE, assertCanContact, assertCanSendOutbound, decryptWabaToken } from "@reto-whatsapp/core";
+import {
+  AI_AGENT_REPLY_QUEUE,
+  assertCanContact,
+  assertCanSendOutbound,
+  decryptWabaToken,
+  isBusinessScopedUserId,
+} from "@reto-whatsapp/core";
 import type { Database, Json } from "@reto-whatsapp/db";
 import { createWorkerSupabaseClient } from "../supabase";
 import { getWhatsAppClientForPhoneNumber } from "../lib/whatsapp-client";
@@ -126,24 +132,33 @@ async function buildConversationHistory(
 async function lookupKnownCustomer(
   servers: McpServerConnection[],
   phone: string,
-): Promise<{ name: string | null; email: string | null } | null> {
+): Promise<KnownCustomer | null> {
   if (servers.length === 0) return null;
   const lookupTool = await findMcpTool(servers, CUSTOMER_LOOKUP_TOOL_NAME);
   if (!lookupTool) return null;
   try {
     const result = await callMcpTool(lookupTool.server, CUSTOMER_LOOKUP_TOOL_NAME, { phone });
     if (result.isError) return null;
-    const customer = JSON.parse(result.text) as { name?: string | null; email?: string | null };
-    return customer.name || customer.email ? { name: customer.name ?? null, email: customer.email ?? null } : null;
+    const customer = JSON.parse(result.text) as { name?: string | null; email?: string | null; phone?: string | null };
+    // Registros viejos guardaron el BSUID como teléfono: eso no es un número real.
+    const realPhone = customer.phone && !isBusinessScopedUserId(customer.phone.trim()) ? customer.phone : null;
+    return { name: customer.name ?? null, email: customer.email ?? null, phone: realPhone };
   } catch (error) {
     console.error("[ai-agent-reply] no se pudo buscar al cliente", error);
     return null;
   }
 }
 
-function formatKnownCustomerContext(customer: { name: string | null; email: string | null } | null): string {
+interface KnownCustomer {
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+}
+
+function formatKnownCustomerContext(customer: KnownCustomer | null, usesUsername: boolean): string {
   if (!customer) return "";
-  return `\n\n## CLIENTE YA REGISTRADO (dato real del sistema)\n\nNombre: ${customer.name ?? "(sin registrar)"}\nCorreo: ${customer.email ?? "(sin registrar)"}\n\nNo le vuelvas a pedir los datos que ya aparecen aquí: salúdalo por su nombre y úsalos directamente al agendar (pasa el correo como customer_email). Solo pide lo que diga "(sin registrar)", o cámbialos si el cliente te da otros.`;
+  const phoneLine = usesUsername ? `\nCelular: ${customer.phone ?? "(sin registrar)"}` : "";
+  return `\n\n## CLIENTE YA REGISTRADO (dato real del sistema)\n\nNombre: ${customer.name ?? "(sin registrar)"}\nCorreo: ${customer.email ?? "(sin registrar)"}${phoneLine}\n\nNo le vuelvas a pedir los datos que ya aparecen aquí: salúdalo por su nombre y úsalos directamente al agendar (pasa el correo como customer_email). Solo pide lo que diga "(sin registrar)", o cámbialos si el cliente te da otros.`;
 }
 
 function formatAgentActionsContext(actions: AgentAction[]): string {
@@ -594,7 +609,12 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
   const now = new Date();
   const currentDateContext = `## FECHA Y HORA ACTUALES (dato real, no lo asumas nunca)\n\nHoy es ${now.toLocaleDateString("es-CO", { timeZone: "America/Bogota", weekday: "long", year: "numeric", month: "long", day: "numeric" })}, son las ${now.toLocaleTimeString("es-CO", { timeZone: "America/Bogota", hour: "2-digit", minute: "2-digit" })} hora de Colombia. Usa este dato como única fuente de verdad para resolver cualquier fecha relativa ("hoy", "mañana", "el viernes", "el 13 de agosto") y para construir el año en cualquier YYYY-MM-DD que envíes a una herramienta MCP.`;
   const knownCustomer = await lookupKnownCustomer(mcpServers, contact.wa_id);
-  const customerContext = `\n\n## NÚMERO DE WHATSAPP DEL CLIENTE (dato real, no lo asumas ni lo inventes)\n\nEste cliente te está escribiendo desde el número ${contact.wa_id}. Úsalo como "phone" en las herramientas MCP (list_customer_appointments, reschedule_appointment, cancel_appointment, create_appointment, log_customer_note) para buscar o registrar sus citas — no le pidas su número salvo que quiera agendar o registrar a nombre de otra persona.`;
+  // Quien escribe con nombre de usuario de WhatsApp llega con un BSUID ("CO.2278…") en vez de
+  // número: sirve para reconocerlo, pero no es un teléfono al que se le puedan mandar recordatorios.
+  const usesUsername = isBusinessScopedUserId(contact.wa_id);
+  const customerContext = usesUsername
+    ? `\n\n## CLIENTE CON NOMBRE DE USUARIO DE WHATSAPP (dato real, no lo asumas ni lo inventes)\n\nEste cliente escribe con nombre de usuario y no comparte su número; su identificador es ${contact.wa_id}. Úsalo como "phone" en las herramientas MCP para buscar sus citas o registrar notas. Pero NO es un número de teléfono: para agendar, si no tiene celular registrado, pídele su número de celular (explícale que es para enviarle los recordatorios de la cita) y llama a find_or_create_customer con phone=<su celular>, whatsapp_id=${contact.wa_id}, su nombre y correo; luego usa el customer_id que te devuelva en create_appointment. Nunca uses ${contact.wa_id} como teléfono de un cliente nuevo.`
+    : `\n\n## NÚMERO DE WHATSAPP DEL CLIENTE (dato real, no lo asumas ni lo inventes)\n\nEste cliente te está escribiendo desde el número ${contact.wa_id}. Úsalo como "phone" en las herramientas MCP (list_customer_appointments, reschedule_appointment, cancel_appointment, create_appointment, log_customer_note) para buscar o registrar sus citas — no le pidas su número salvo que quiera agendar o registrar a nombre de otra persona.`;
   // Lo fijo va primero y con marca de caché (junto con las definiciones de herramientas, que
   // van antes del system): se cobra ~10% en las siguientes llamadas y responde más rápido. La
   // fecha/hora y el número cambian por mensaje, así que van después de la marca.
@@ -604,7 +624,7 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
       text: businessDescription + NO_MARKDOWN_CONTEXT + SINGLE_MESSAGE_CONTEXT,
       cache_control: { type: "ephemeral" },
     },
-    { type: "text", text: currentDateContext + customerContext + formatKnownCustomerContext(knownCustomer) + formatAgentActionsContext(pastActions) },
+    { type: "text", text: currentDateContext + customerContext + formatKnownCustomerContext(knownCustomer, usesUsername) + formatAgentActionsContext(pastActions) },
   ];
 
   // El clasificador de tema (opt-in) corre en paralelo con la respuesta en vez de antes, para
