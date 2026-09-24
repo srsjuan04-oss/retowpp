@@ -14,6 +14,7 @@ import type { Json } from "@reto-whatsapp/db";
 import { requireRole } from "@/lib/auth/dal";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { enqueueTemplateSync } from "@/lib/queues/template-sync";
+import { TEMPLATE_LANGUAGE_CODES } from "@/lib/templates/languages";
 
 export async function triggerTemplateSync(): Promise<void> {
   await requireRole("admin", "supervisor");
@@ -24,7 +25,7 @@ const CreateTemplateSchema = z.object({
   wabaAccountId: z.uuid(),
   name: z.string().regex(TEMPLATE_NAME_RE, { error: "El nombre solo puede tener minúsculas, números y guion bajo." }),
   category: z.enum(["MARKETING", "UTILITY", "AUTHENTICATION"]),
-  language: z.string().min(2, { error: "El código de idioma es obligatorio (ej. es_MX)." }),
+  language: z.string().refine((code) => TEMPLATE_LANGUAGE_CODES.includes(code), { error: "Elige un idioma de la lista." }),
   headerText: z.string().optional(),
   bodyText: z.string().min(1, { error: "El cuerpo de la plantilla es obligatorio." }),
   footerText: z.string().optional(),

@@ -1,6 +1,7 @@
 import { requireRole } from "@/lib/auth/dal";
 import { createClient } from "@/lib/supabase/server";
 import { listAllTemplates, type SyncedTemplate } from "@/lib/templates/queries";
+import { templateLanguageLabel } from "@/lib/templates/languages";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { SyncTemplatesButton } from "./sync-button";
 import { CreateTemplateForm } from "./create-template-form";
@@ -67,7 +68,7 @@ export default async function TemplatesPage() {
                 {group.templates.map((t) => (
                   <tr key={t.id} className="border-t">
                     <td className="px-3 py-2 font-medium">{t.name}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{t.language}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{templateLanguageLabel(t.language)}</td>
                     <td className="px-3 py-2">
                       <Badge variant={STATUS_BADGE_VARIANTS[t.status] ?? "neutral"}>{t.status}</Badge>
                     </td>

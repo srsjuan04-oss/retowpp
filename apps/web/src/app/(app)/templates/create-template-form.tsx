@@ -6,6 +6,11 @@ import { createTemplate, type CreateTemplateState } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DEFAULT_TEMPLATE_LANGUAGE,
+  OTHER_TEMPLATE_LANGUAGES,
+  SPANISH_TEMPLATE_LANGUAGES,
+} from "@/lib/templates/languages";
 import { cn } from "@/lib/utils";
 
 const initialState: CreateTemplateState = {};
@@ -65,7 +70,22 @@ export function CreateTemplateForm({ wabaAccounts }: { wabaAccounts: { id: strin
         </div>
         <div className="flex flex-1 flex-col gap-2">
           <Label htmlFor="language">Idioma</Label>
-          <Input id="language" name="language" placeholder="es_MX" defaultValue="es_MX" required />
+          <select id="language" name="language" required defaultValue={DEFAULT_TEMPLATE_LANGUAGE} className={selectClassName}>
+            <optgroup label="Español">
+              {SPANISH_TEMPLATE_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.label} — {l.code}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Otros idiomas">
+              {OTHER_TEMPLATE_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.label} — {l.code}
+                </option>
+              ))}
+            </optgroup>
+          </select>
         </div>
       </div>
 
