@@ -9,7 +9,7 @@ import type {
   BetaUsage,
 } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { AI_AGENT_REPLY_QUEUE, assertCanContact, assertCanSendOutbound, decryptWabaToken } from "@reto-whatsapp/core";
-import type { Database } from "@reto-whatsapp/db";
+import type { Database, Json } from "@reto-whatsapp/db";
 import { createWorkerSupabaseClient } from "../supabase";
 import { getWhatsAppClientForPhoneNumber } from "../lib/whatsapp-client";
 import { callMcpTool, listMcpTools, type McpServerConnection, type McpToolDefinition } from "../lib/mcp-client";
@@ -71,11 +71,30 @@ interface HistoryTurn {
   content: string;
 }
 
+// Herramientas MCP que solo consultan: no hace falta recordarlas en turnos siguientes.
+const READ_ONLY_TOOL_PREFIXES = ["list_", "get_", "search_", "check_", "find_"];
+const ACTION_RESULT_MAX_CHARS = 400;
+
+/** Herramienta que cambió algo (agendar, cancelar, reprogramar…) en una respuesta del agente.
+ * Se guarda en `messages.content.agent_actions` porque el historial que recibe el modelo en
+ * el turno siguiente es solo texto: sin esto no sabe que fue él quien agendó una cita y, al
+ * volver a consultar disponibilidad, confunde la cita que acaba de crear con un choque. */
+interface AgentAction {
+  tool: string;
+  input: unknown;
+  result: string;
+  isError: boolean;
+  at: string;
+}
+
 type UsageLike = Pick<BetaUsage, "input_tokens" | "output_tokens"> &
   Partial<Pick<BetaUsage, "cache_creation_input_tokens" | "cache_read_input_tokens">>;
 
 /** Solo mensajes de texto (los de plantilla/media no tienen un `body` legible para dar contexto al modelo). */
-async function buildConversationHistory(supabase: Client, conversationId: string): Promise<HistoryTurn[]> {
+async function buildConversationHistory(
+  supabase: Client,
+  conversationId: string,
+): Promise<{ turns: HistoryTurn[]; actions: AgentAction[] }> {
   const windowStart = new Date(Date.now() - HISTORY_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from("messages")
@@ -88,12 +107,55 @@ async function buildConversationHistory(supabase: Client, conversationId: string
   if (error) throw error;
 
   const turns: HistoryTurn[] = [];
+  const actions: AgentAction[] = [];
   for (const m of (data ?? []).reverse()) {
-    const body = (m.content as { body?: string } | null)?.body;
-    if (!body) continue;
-    turns.push({ role: m.direction === "inbound" ? "user" : "assistant", content: body });
+    const content = m.content as { body?: string; agent_actions?: AgentAction[] } | null;
+    if (content?.agent_actions) actions.push(...content.agent_actions);
+    if (!content?.body) continue;
+    turns.push({ role: m.direction === "inbound" ? "user" : "assistant", content: content.body });
   }
-  return turns;
+  return { turns, actions };
+}
+
+function formatAgentActionsContext(actions: AgentAction[]): string {
+  if (actions.length === 0) return "";
+  const lines = actions.map((a) => {
+    const at = new Date(a.at).toLocaleString("es-CO", { timeZone: "America/Bogota", dateStyle: "short", timeStyle: "short" });
+    return `- ${at}: ${a.tool}(${JSON.stringify(a.input)}) → ${a.isError ? "ERROR: " : ""}${a.result}`;
+  });
+  return `\n\n## ACCIONES QUE YA REALIZASTE EN ESTA CONVERSACIÓN (dato real del sistema)\n\n${lines.join("\n")}\n\nEstos cambios ya están hechos. Si al consultar disponibilidad ves ocupado un horario que coincide con una cita que tú agendaste aquí, es la cita de este cliente, no un choque: no la corrijas ni le digas que ya no está disponible. No vuelvas a agendar ni a verificar una cita ya confirmada salvo que el cliente pida cambiarla.`;
+}
+
+function blockText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((b) => (b && typeof b === "object" && "text" in b && typeof b.text === "string" ? b.text : ""))
+    .join("\n");
+}
+
+/** Herramientas MCP (no de solo lectura) que se ejecutaron en esta respuesta, con su resultado. */
+function collectAgentActions(content: BetaContentBlock[]): AgentAction[] {
+  const results = new Map<string, { text: string; isError: boolean }>();
+  for (const b of content) {
+    if (b.type === "mcp_tool_result") {
+      results.set(b.tool_use_id, { text: blockText(b.content), isError: Boolean(b.is_error) });
+    }
+  }
+  const at = new Date().toISOString();
+  return content
+    .filter((b): b is Extract<BetaContentBlock, { type: "mcp_tool_use" }> => b.type === "mcp_tool_use")
+    .filter((b) => !READ_ONLY_TOOL_PREFIXES.some((prefix) => b.name.startsWith(prefix)))
+    .map((b) => {
+      const result = results.get(b.id);
+      return {
+        tool: b.name,
+        input: b.input,
+        result: (result?.text ?? "").slice(0, ACTION_RESULT_MAX_CHARS),
+        isError: result?.isError ?? false,
+        at,
+      };
+    });
 }
 
 /** wamid del último mensaje de texto entrante: si no es el que disparó este job, el cliente
@@ -127,8 +189,17 @@ async function getLastAgentMessageBody(supabase: Client, conversationId: string)
   return (data?.content as { body?: string } | null)?.body ?? null;
 }
 
+/** Texto para el cliente. Lo que el modelo escribe antes de usar una herramienta MCP ("ya te
+ * agendo…") es narración del paso intermedio y se descarta: solo cuenta lo escrito después de
+ * la última consulta. Si no escribió nada después, se usa todo el texto. */
 function extractReplyText(content: Array<{ type: string; text?: string }>): string {
+  let lastMcpIndex = -1;
+  content.forEach((block, i) => {
+    if (block.type === "mcp_tool_use" || block.type === "mcp_tool_result") lastMcpIndex = i;
+  });
+  const hasTextAfter = content.some((block, i) => i > lastMcpIndex && block.type === "text" && block.text?.trim());
   return content
+    .filter((block, i) => !hasTextAfter || i > lastMcpIndex)
     .filter((block) => block.type === "text" && typeof block.text === "string")
     .map((block) => block.text as string)
     .join("\n")
@@ -187,6 +258,7 @@ async function sendAgentReply(
   phoneNumberRowId: string,
   waId: string,
   body: string,
+  actions: AgentAction[] = [],
 ): Promise<void> {
   const client = await getWhatsAppClientForPhoneNumber(supabase, phoneNumberRowId);
   const sendResponse = await client.sendTextMessage({ to: waId, body });
@@ -198,7 +270,7 @@ async function sendAgentReply(
     direction: "outbound",
     sender_type: "ai_agent",
     message_type: "text",
-    content: { body },
+    content: (actions.length > 0 ? { body, agent_actions: actions } : { body }) as Json,
     status: "sent",
   });
   await supabase.from("conversations").update({ last_outbound_at: new Date().toISOString() }).eq("id", conversationId);
@@ -295,7 +367,7 @@ interface ReplyStats {
 
 async function generateReply(
   ctx: ReplyContext,
-): Promise<{ text: string; usedTools: boolean; stats: ReplyStats } | null> {
+): Promise<{ text: string; usedTools: boolean; actions: AgentAction[]; stats: ReplyStats } | null> {
   const noteTool = ctx.mcpServers.length > 0 ? await findNoteTool(ctx.mcpServers) : null;
 
   const tools: BetaToolUnion[] = ctx.mcpServers.map((s) => ({
@@ -314,6 +386,7 @@ async function generateReply(
 
   const messages: BetaMessageParam[] = [...ctx.history];
   const texts: string[] = [];
+  const actions: AgentAction[] = [];
   let usedTools = false;
   const stats: ReplyStats = { claudeMs: 0, claudeCalls: 0, mcpToolCalls: 0, cacheReadTokens: 0 };
 
@@ -350,6 +423,7 @@ async function generateReply(
     if ((response.stop_reason as string) === "refusal") return null; // el clasificador de seguridad rechazó la respuesta; no se envía nada.
 
     if (response.content.some((b) => b.type === "mcp_tool_use" || b.type === "tool_use")) usedTools = true;
+    actions.push(...collectAgentActions(response.content));
     const text = extractReplyText(response.content);
     if (text) texts.push(text);
 
@@ -394,7 +468,7 @@ async function generateReply(
   }
 
   const replyText = texts.join("\n").trim();
-  return replyText ? { text: replyText, usedTools, stats } : null;
+  return replyText ? { text: replyText, usedTools, actions, stats } : null;
 }
 
 /**
@@ -451,7 +525,7 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
   if (!assertCanContact(contact.consent_status).allowed) return;
   if (!assertCanSendOutbound({ kind: "session", lastInboundAt: conversation.last_inbound_at }).allowed) return;
 
-  const [usedUsd, history, mcpResult] = await Promise.all([
+  const [usedUsd, { turns: history, actions: pastActions }, mcpResult] = await Promise.all([
     // Tope de gasto mensual (obligatorio con la key de la plataforma; con key propia, null = sin tope).
     monthlyCapUsd != null ? getMonthlyUsageUsd(supabase, conversation.company_id) : Promise.resolve(0),
     buildConversationHistory(supabase, conversationId),
@@ -499,7 +573,7 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
       text: businessDescription + NO_MARKDOWN_CONTEXT + SINGLE_MESSAGE_CONTEXT,
       cache_control: { type: "ephemeral" },
     },
-    { type: "text", text: currentDateContext + customerContext },
+    { type: "text", text: currentDateContext + customerContext + formatAgentActionsContext(pastActions) },
   ];
 
   // El clasificador de tema (opt-in) corre en paralelo con la respuesta en vez de antes, para
@@ -556,7 +630,7 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
   }
 
   const sendStartedAt = Date.now();
-  await sendAgentReply(supabase, conversationId, conversation.phone_number_id, contact.wa_id, reply.text);
+  await sendAgentReply(supabase, conversationId, conversation.phone_number_id, contact.wa_id, reply.text, reply.actions);
 
   // Medición por etapas para saber dónde se va el tiempo de cada respuesta (logs de Railway).
   const { stats } = reply;
