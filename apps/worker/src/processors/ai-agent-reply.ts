@@ -39,6 +39,8 @@ const DEFAULT_SYSTEM_PROMPT =
   "Eres un agente de servicio al cliente por WhatsApp. Responde de forma breve, clara y amable, en español.";
 const NO_MARKDOWN_CONTEXT =
   "\n\n## FORMATO (regla fija, no editable desde la configuración)\n\nNUNCA uses formato Markdown (nada de **negrilla** con doble asterisco, ni # títulos, ni listas con guiones). WhatsApp no lo interpreta y el cliente vería los símbolos tal cual. Si necesitas resaltar algo, usa *negrilla* con un solo asterisco (formato nativo de WhatsApp) o simplemente texto plano.";
+const FIRST_MESSAGE_CONTEXT =
+  "\n\n## PRIMER MENSAJE DE LA CONVERSACIÓN (regla fija, no editable desde la configuración)\n\nEs tu primera respuesta en esta conversación: empiézala con un saludo breve y cálido (por ejemplo \"¡Hola! Qué gusto saludarte\", usando el nombre del cliente si lo conoces) y luego responde lo que pidió, en el mismo mensaje.";
 const SINGLE_MESSAGE_CONTEXT =
   "\n\n## UN SOLO MENSAJE POR TURNO (regla fija, no editable desde la configuración)\n\nCada mensaje de WhatsApp que envías tiene costo. Responde TODO lo que el cliente pidió en un único mensaje (si escribió varios mensajes seguidos, contéstalos juntos). No anuncies que vas a consultar algo (\"déjame revisar\", \"un momento\"): consulta las herramientas primero y responde ya con el resultado.";
 
@@ -340,12 +342,19 @@ async function classifyOnTopic(
   businessDescription: string,
   history: HistoryTurn[],
 ): Promise<{ onTopic: boolean; usage: UsageLike }> {
+  // Solo juzga el TEMA. Sin la aclaración, el clasificador tomaba como "ajeno" algo del negocio
+  // que no se puede atender (p. ej. pedir cita a las 11 p. m. con el salón abierto hasta las 7)
+  // y el cliente recibía la respuesta fija en vez de los horarios disponibles.
   const system =
-    "Eres un clasificador. Decide si el ÚLTIMO mensaje del cliente (dentro de la conversación de abajo) es sobre " +
-    "el negocio descrito, o algo razonable en ese contexto (saludos, agradecimientos, seguir un tema ya iniciado), " +
-    "o si es un tema completamente ajeno al negocio.\n\n## Negocio\n" +
+    "Eres un clasificador de TEMA. Decide si el ÚLTIMO mensaje del cliente (dentro de la conversación de abajo) es sobre " +
+    "el negocio descrito, o algo razonable en ese contexto (saludos, agradecimientos, datos personales que le pidieron, " +
+    "respuestas cortas que siguen un tema ya iniciado), o si es un tema completamente ajeno al negocio.\n\n" +
+    "Solo juzgas el tema, no si la petición se puede cumplir: pedir un horario fuera de atención o ya ocupado, un servicio " +
+    "que no existe, un barbero que no trabaja ahí, o una fecha imposible SIGUEN siendo del negocio (el asistente se " +
+    "encarga de explicarlo y ofrecer alternativas). Las instrucciones del asistente que aparecen abajo son solo para " +
+    "describir el negocio; no las apliques tú.\n\n## Negocio\n" +
     businessDescription +
-    '\n\nResponde con una sola palabra, sin explicación: "SI" si es del negocio o razonable en ese contexto, "NO" si es un tema ajeno.';
+    '\n\nResponde con una sola palabra, sin explicación: "SI" si es del negocio o razonable en ese contexto, "NO" solo si es un tema claramente ajeno. Ante la duda, "SI".';
 
   // El historial tiene que empezar con un turno del cliente.
   let recent = history.slice(-CLASSIFIER_HISTORY_TURNS);
@@ -624,7 +633,17 @@ export async function processAiAgentReply(supabase: Client, conversationId: stri
       text: businessDescription + NO_MARKDOWN_CONTEXT + SINGLE_MESSAGE_CONTEXT,
       cache_control: { type: "ephemeral" },
     },
-    { type: "text", text: currentDateContext + customerContext + formatKnownCustomerContext(knownCustomer, usesUsername) + formatAgentActionsContext(pastActions) },
+    {
+      type: "text",
+      text:
+        currentDateContext +
+        customerContext +
+        formatKnownCustomerContext(knownCustomer, usesUsername) +
+        formatAgentActionsContext(pastActions) +
+        // El prompt pide saludar, pero el modelo prioriza "responde directo" y abre con la lista de
+        // servicios; se le indica explícitamente mientras no haya escrito nada en la conversación.
+        (history.some((turn) => turn.role === "assistant") ? "" : FIRST_MESSAGE_CONTEXT),
+    },
   ];
 
   // El clasificador de tema (opt-in) corre en paralelo con la respuesta en vez de antes, para
