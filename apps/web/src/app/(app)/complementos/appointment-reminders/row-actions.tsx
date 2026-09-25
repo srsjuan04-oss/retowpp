@@ -1,9 +1,10 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { setAppointmentReminderTemplate, toggleAppointmentReminderActive, type ActionState } from "./actions";
+import { setAppointmentReminderSender, toggleAppointmentReminderActive, type ActionState } from "./actions";
+import { SenderAndTemplateFields } from "./sender-fields";
 import { Button } from "@/components/ui/button";
-import type { TemplateOption } from "@/lib/templates/queries";
+import type { ReminderSenderOption, ReminderTemplateOption } from "@/lib/complementos/appointment-reminder-queries";
 
 const initialState: ActionState = {};
 
@@ -11,20 +12,24 @@ export function AppointmentReminderRowActions({
   webhookId,
   webhookUrl,
   isActive,
+  phoneNumberId,
   templateId,
+  phoneNumbers,
   templates,
 }: {
   webhookId: string;
   webhookUrl: string;
   isActive: boolean;
+  phoneNumberId: string;
   templateId: string | null;
-  templates: TemplateOption[];
+  phoneNumbers: ReminderSenderOption[];
+  templates: ReminderTemplateOption[];
 }) {
   const [copied, setCopied] = useState(false);
-  const [state, formAction, pending] = useActionState(setAppointmentReminderTemplate, initialState);
+  const [state, formAction, pending] = useActionState(setAppointmentReminderSender, initialState);
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <Button
           type="button"
@@ -43,30 +48,22 @@ export function AppointmentReminderRowActions({
         </Button>
       </div>
 
-      <form action={formAction} className="flex items-center gap-2">
+      <form action={formAction} className="flex flex-wrap items-end gap-2">
         <input type="hidden" name="webhookId" value={webhookId} />
-        <select
-          name="templateId"
-          defaultValue={templateId ?? ""}
-          className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-        >
-          <option value="" disabled>
-            Elegir plantilla…
-          </option>
-          {templates.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name} ({t.language})
-            </option>
-          ))}
-        </select>
+        <SenderAndTemplateFields
+          idPrefix={webhookId}
+          phoneNumbers={phoneNumbers}
+          templates={templates}
+          defaultPhoneNumberId={phoneNumberId}
+          defaultTemplateId={templateId}
+          size="sm"
+        />
         <Button type="submit" variant="outline" size="sm" disabled={pending}>
-          {pending ? "Guardando…" : "Asignar"}
+          {pending ? "Guardando…" : "Guardar"}
         </Button>
       </form>
       {state?.error && <p className="text-xs text-destructive">{state.error}</p>}
-      {templates.length === 0 && (
-        <p className="text-xs text-muted-foreground">No hay plantillas aprobadas todavía. Sincronízalas en /templates.</p>
-      )}
+      {state?.saved && !pending && <p className="text-xs text-muted-foreground">Guardado. La URL sigue siendo la misma.</p>}
     </div>
   );
 }

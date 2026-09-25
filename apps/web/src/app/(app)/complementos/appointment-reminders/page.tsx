@@ -1,16 +1,16 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { requireRole } from "@/lib/auth/dal";
-import { listAppointmentReminderWebhooks } from "@/lib/complementos/appointment-reminder-queries";
-import { listApprovedTemplates } from "@/lib/templates/queries";
+import { listAppointmentReminderWebhooks, listReminderSenderOptions } from "@/lib/complementos/appointment-reminder-queries";
 import { Badge } from "@/components/ui/badge";
 import { AppointmentReminderRowActions } from "./row-actions";
+import { CreateAppointmentReminderForm } from "./create-form";
 
 export default async function AppointmentRemindersComplementoPage() {
   await requireRole("admin", "supervisor");
-  const [webhooks, templates, headersList] = await Promise.all([
+  const [webhooks, { phoneNumbers, templates }, headersList] = await Promise.all([
     listAppointmentReminderWebhooks(),
-    listApprovedTemplates(),
+    listReminderSenderOptions(),
     headers(),
   ]);
 
@@ -32,6 +32,8 @@ export default async function AppointmentRemindersComplementoPage() {
         </p>
       </header>
 
+      <CreateAppointmentReminderForm phoneNumbers={phoneNumbers} templates={templates} />
+
       <div className="flex flex-col gap-4">
         {webhooks.map((w) => {
           const webhookUrl = `${origin}/api/webhooks/appointment-reminder/${w.id}`;
@@ -41,7 +43,7 @@ export default async function AppointmentRemindersComplementoPage() {
                 <div>
                   <p className="font-medium">{w.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    Enviar desde: {w.phoneNumberLabel} · Plantilla: {w.templateName}
+                    Enviar desde: {phoneNumbers.find((p) => p.id === w.phoneNumberId)?.label ?? `${w.phoneNumberLabel} (cuenta inactiva)`} · Plantilla: {w.templateName}
                   </p>
                 </div>
                 <Badge variant={w.isActive ? "brand" : "neutral"}>{w.isActive ? "activo" : "inactivo"}</Badge>
@@ -56,7 +58,9 @@ export default async function AppointmentRemindersComplementoPage() {
                   webhookId={w.id}
                   webhookUrl={webhookUrl}
                   isActive={w.isActive}
+                  phoneNumberId={w.phoneNumberId}
                   templateId={w.templateId}
+                  phoneNumbers={phoneNumbers}
                   templates={templates}
                 />
               </div>

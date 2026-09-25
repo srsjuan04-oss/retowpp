@@ -58,8 +58,19 @@ export async function syncAllTemplates(supabase: Client): Promise<void> {
     .eq("is_active", true);
   if (error) throw error;
 
+  // Una WABA con token vencido o sin permisos no debe frenar a las demás: antes el
+  // primer error cortaba el ciclo y las WABA siguientes nunca traían sus plantillas.
+  const failures: string[] = [];
   for (const account of wabaAccounts ?? []) {
-    await syncWabaTemplates(supabase, account.id, account.waba_id, account.company_id, account.access_token_encrypted);
+    try {
+      await syncWabaTemplates(supabase, account.id, account.waba_id, account.company_id, account.access_token_encrypted);
+    } catch (err) {
+      console.error(`[template-sync] falló la WABA ${account.waba_id}`, err);
+      failures.push(account.waba_id);
+    }
+  }
+  if (failures.length > 0) {
+    console.error(`[template-sync] ${failures.length} WABA sin sincronizar: ${failures.join(", ")}`);
   }
 }
 

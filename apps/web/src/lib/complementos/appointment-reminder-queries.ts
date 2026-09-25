@@ -7,6 +7,7 @@ export interface AppointmentReminderWebhookItem {
   isActive: boolean;
   templateId: string | null;
   templateName: string;
+  phoneNumberId: string;
   phoneNumberLabel: string;
   createdAt: string;
 }
@@ -43,7 +44,62 @@ export async function listAppointmentReminderWebhooks(): Promise<AppointmentRemi
     isActive: w.is_active,
     templateId: w.template_id,
     templateName: w.template_id ? (templateNameById.get(w.template_id) ?? "—") : "Sin plantilla todavía",
+    phoneNumberId: w.phone_number_id,
     phoneNumberLabel: phoneLabelById.get(w.phone_number_id) ?? "—",
     createdAt: w.created_at,
   }));
+}
+
+export interface ReminderSenderOption {
+  id: string;
+  label: string;
+  wabaAccountId: string;
+}
+
+export interface ReminderTemplateOption {
+  id: string;
+  name: string;
+  language: string;
+  wabaAccountId: string;
+}
+
+/**
+ * Números y plantillas para armar un recordatorio. Una plantilla solo se puede enviar
+ * desde un número de su misma WABA, así que ambos llevan wabaAccountId para filtrar.
+ * El nombre de la WABA va en la etiqueta porque un mismo número puede estar en dos
+ * WABA distintas (ej. al migrarlo de cuenta) y sin eso se ven idénticos.
+ */
+export async function listReminderSenderOptions(): Promise<{
+  phoneNumbers: ReminderSenderOption[];
+  templates: ReminderTemplateOption[];
+}> {
+  const supabase = await createClient();
+
+  const [{ data: phones, error: phonesError }, { data: templates, error: templatesError }, { data: wabas, error: wabasError }] =
+    await Promise.all([
+      supabase.from("phone_numbers").select("id, label, display_phone_number, waba_account_id").eq("is_active", true),
+      supabase.from("templates").select("id, name, language, waba_account_id").eq("status", "approved").order("name"),
+      supabase.from("waba_accounts").select("id, business_name, is_active"),
+    ]);
+  if (phonesError) throw phonesError;
+  if (templatesError) throw templatesError;
+  if (wabasError) throw wabasError;
+
+  const activeWabaName = new Map((wabas ?? []).filter((w) => w.is_active).map((w) => [w.id, w.business_name]));
+
+  return {
+    phoneNumbers: (phones ?? [])
+      .filter((p) => activeWabaName.has(p.waba_account_id))
+      .map((p) => ({
+        id: p.id,
+        label: `${p.label ?? p.display_phone_number} · ${activeWabaName.get(p.waba_account_id) ?? "—"}`,
+        wabaAccountId: p.waba_account_id,
+      })),
+    templates: (templates ?? []).map((t) => ({
+      id: t.id,
+      name: t.name,
+      language: t.language,
+      wabaAccountId: t.waba_account_id,
+    })),
+  };
 }
