@@ -16,12 +16,14 @@ export interface AiAgentSettings {
 
 /** Nunca selecciona `anthropic_api_key_encrypted` ni `ai_monthly_cap_usd`: el consumo y el cupo de IA
  * son internos (solo /plataforma/empresas, con service role) y esas columnas ni siquiera son
- * legibles para `authenticated` (ver migraciones). */
-export async function getAiAgentSettings(): Promise<AiAgentSettings | null> {
+ * legibles para `authenticated` (ver migraciones). Se filtra por empresa aunque RLS ya lo haga:
+ * un administrador de plataforma ve las filas de todas y `.maybeSingle()` fallaba. */
+export async function getAiAgentSettings(companyId: string): Promise<AiAgentSettings | null> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("ai_agent_settings")
     .select("id, is_enabled, model, system_prompt, topic_restriction, off_topic_reply")
+    .eq("company_id", companyId)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
@@ -43,11 +45,12 @@ export interface McpServerItem {
   createdAt: string;
 }
 
-export async function listMcpServers(): Promise<McpServerItem[]> {
+export async function listMcpServers(companyId: string): Promise<McpServerItem[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("mcp_servers")
     .select("id, name, url, is_active, created_at")
+    .eq("company_id", companyId)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []).map((s) => ({ id: s.id, name: s.name, url: s.url, isActive: s.is_active, createdAt: s.created_at }));

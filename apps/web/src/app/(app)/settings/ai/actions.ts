@@ -38,7 +38,11 @@ export async function connectAnthropic(_prev: ActionState | undefined, formData:
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos." };
 
   const supabase = await createClient();
-  const { data: existing, error: existingError } = await supabase.from("ai_agent_settings").select("id").maybeSingle();
+  const { data: existing, error: existingError } = await supabase
+    .from("ai_agent_settings")
+    .select("id")
+    .eq("company_id", session.companyId)
+    .maybeSingle();
   if (existingError) return { error: existingError.message };
 
   const fields = {
@@ -61,7 +65,12 @@ export async function setAgentEnabled(isEnabled: boolean): Promise<ActionState> 
   if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
   const supabase = await createClient();
 
-  const { data: existing } = await supabase.from("ai_agent_settings").select("id").maybeSingle();
+  const { data: existing, error: existingError } = await supabase
+    .from("ai_agent_settings")
+    .select("id")
+    .eq("company_id", session.companyId)
+    .maybeSingle();
+  if (existingError) return { error: existingError.message };
   const { error } = existing
     ? await supabase.from("ai_agent_settings").update({ is_enabled: isEnabled }).eq("id", existing.id)
     : await supabase.from("ai_agent_settings").insert({ company_id: session.companyId, is_enabled: isEnabled });
@@ -108,19 +117,27 @@ export async function addMcpServer(_prev: ActionState | undefined, formData: For
   return { success: true };
 }
 
+// Los filtros por company_id de este archivo no sobran aunque RLS ya separe empresas: un
+// administrador de plataforma puede leer y escribir filas de todas.
 export async function setMcpServerActive(id: string, isActive: boolean): Promise<ActionState> {
-  await requireRole("admin");
+  const session = await requireRole("admin");
+  if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
   const supabase = await createClient();
-  const { error } = await supabase.from("mcp_servers").update({ is_active: isActive }).eq("id", id);
+  const { error } = await supabase
+    .from("mcp_servers")
+    .update({ is_active: isActive })
+    .eq("id", id)
+    .eq("company_id", session.companyId);
   if (error) return { error: friendlyDbError(error) };
   revalidatePath("/settings/ai");
   return { success: true };
 }
 
 export async function deleteMcpServer(id: string): Promise<ActionState> {
-  await requireRole("admin");
+  const session = await requireRole("admin");
+  if (!session.companyId) return { error: "Tu usuario no pertenece a ninguna empresa." };
   const supabase = await createClient();
-  const { error } = await supabase.from("mcp_servers").delete().eq("id", id);
+  const { error } = await supabase.from("mcp_servers").delete().eq("id", id).eq("company_id", session.companyId);
   if (error) return { error: friendlyDbError(error) };
   revalidatePath("/settings/ai");
   return { success: true };

@@ -7,10 +7,16 @@ import { McpServerForm } from "./mcp-server-form";
 import { McpServerList } from "./mcp-server-list";
 
 export default async function AiAgentSettingsPage() {
-  await requireRole("admin");
+  const session = await requireRole("admin");
+  if (!session.companyId) {
+    return <p className="p-8 text-sm text-muted-foreground">Tu usuario no pertenece a ninguna empresa.</p>;
+  }
   // El consumo y el cupo de IA no se muestran aquí: son un manejo interno de la plataforma
   // (se ven solo en /plataforma/empresas).
-  const [settings, mcpServers] = await Promise.all([getAiAgentSettings(), listMcpServers()]);
+  const [settings, mcpServers] = await Promise.all([
+    getAiAgentSettings(session.companyId),
+    listMcpServers(session.companyId),
+  ]);
 
   return (
     <div className="flex flex-1 flex-col gap-8 p-8">
