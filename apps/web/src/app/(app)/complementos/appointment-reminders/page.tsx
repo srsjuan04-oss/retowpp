@@ -28,7 +28,7 @@ export default async function AppointmentRemindersComplementoPage() {
         <p className="text-sm text-muted-foreground">
           Cuando salon-pro dispara un recordatorio, llama a esta URL con los datos de la cita (nombre, servicio,
           barbero, hora) y se envía la plantilla aprobada de Meta que elijas abajo. Pega esta URL en salon-pro →
-          Configuración → Gestor de WhatsApp, en el recordatorio correspondiente.
+          Configuración → WhatsApp, en el recordatorio correspondiente.
         </p>
       </header>
 
