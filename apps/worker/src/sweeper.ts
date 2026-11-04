@@ -5,6 +5,10 @@ import { processWebhookEvent } from "./processors/webhook-processing";
 
 const STALE_THRESHOLD_MINUTES = 5;
 const SWEEP_INTERVAL_MS = 60_000;
+/** Tras este número de fallos el evento se deja quieto (queda con processing_error para
+ * revisarlo a mano). Sin tope, un evento con error permanente se reintentaba cada minuto
+ * para siempre (uno llegó a 122.743 reintentos). */
+const MAX_SWEEP_RETRIES = 10;
 
 /**
  * Cubre el caso en que el encolado de un webhook falla justo después de
@@ -32,6 +36,7 @@ async function sweepOnce(supabase: SupabaseClient<Database>, aiAgentReplyQueue: 
     .select("id")
     .is("processed_at", null)
     .lt("received_at", staleBefore)
+    .lt("retry_count", MAX_SWEEP_RETRIES)
     .limit(50);
 
   if (error) {

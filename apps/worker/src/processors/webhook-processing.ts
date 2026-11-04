@@ -164,12 +164,20 @@ async function processInboundMessages(
   }
 }
 
+const KNOWN_MESSAGE_STATUSES = new Set<string>(["queued", "sent", "delivered", "read", "failed"]);
+
 async function processStatusEvents(
   supabase: Client,
   value: NonNullable<WhatsAppWebhookPayload["entry"][number]["changes"][number]["value"]>,
 ) {
-  for (const status of value.statuses ?? []) {
-    const dedupeKey = buildMessageStatusDedupeKey(status.id, status.status, status.timestamp);
+  for (const rawStatus of value.statuses ?? []) {
+    // Meta manda "played" cuando el cliente escucha una nota de voz; el enum message_status
+    // no lo tiene y el upsert fallaba, dejando el evento atascado. Para el CRM equivale a "read".
+    // Cualquier otro estado desconocido se ignora en vez de romper el evento completo.
+    const normalized: string = rawStatus.status === ("played" as string) ? "read" : rawStatus.status;
+    if (!KNOWN_MESSAGE_STATUSES.has(normalized)) continue;
+    const status = { ...rawStatus, status: normalized as MessageStatus };
+    const dedupeKey = buildMessageStatusDedupeKey(status.id, rawStatus.status, status.timestamp);
     const occurredAt = new Date(Number(status.timestamp) * 1000).toISOString();
 
     const { data: message } = await supabase.from("messages").select("id, status").eq("wamid", status.id).maybeSingle();
@@ -247,6 +255,7 @@ const HISTORY_STATUS_MAP: Record<string, Database["public"]["Enums"]["message_st
   sent: "sent",
   delivered: "delivered",
   read: "read",
+  played: "read",
   failed: "failed",
 };
 
