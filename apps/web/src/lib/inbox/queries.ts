@@ -48,25 +48,59 @@ function derivePreview(messageType: string, content: Record<string, unknown> | n
  * (`*, contacts(*)`), porque los tipos de packages/db no modelan las
  * relaciones FK (Relationships) que ese estilo de query necesita.
  */
+/** PostgREST corta cada respuesta en 1000 filas (max_rows); se pide por páginas. */
+const PAGE_SIZE = 1000;
+/** UUIDs por `.in(...)`: ~37 caracteres cada uno, 150 dejan la URL en ~6 KB. Con listas de
+ * miles PostgREST respondía "400 Bad Request" (nos pasó con 691 contactos / 1097 conversaciones). */
+const IN_CHUNK_SIZE = 150;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 export async function listConversations(): Promise<ConversationListItem[]> {
   const supabase = await createClient();
 
-  const { data: conversations, error } = await supabase
-    .from("conversations")
-    .select(
-      "id, status, assigned_to, assigned_team_id, last_inbound_at, last_outbound_at, last_read_at, contact_id, phone_number_id",
-    )
-    .order("last_inbound_at", { ascending: false, nullsFirst: false });
-  if (error) throw error;
-  if (!conversations || conversations.length === 0) return [];
+  const conversations: Array<{
+    id: string;
+    status: ConversationStatus;
+    assigned_to: string | null;
+    assigned_team_id: string | null;
+    last_inbound_at: string | null;
+    last_outbound_at: string | null;
+    last_read_at: string | null;
+    contact_id: string;
+    phone_number_id: string;
+  }> = [];
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data: page, error } = await supabase
+      .from("conversations")
+      .select(
+        "id, status, assigned_to, assigned_team_id, last_inbound_at, last_outbound_at, last_read_at, contact_id, phone_number_id",
+      )
+      .order("last_inbound_at", { ascending: false, nullsFirst: false })
+      .order("id", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    conversations.push(...(page ?? []));
+    if (!page || page.length < PAGE_SIZE) break;
+  }
+  if (conversations.length === 0) return [];
 
-  // Sin `.in("id", [...])`: con cientos/miles de contactos o conversaciones esa lista de
-  // UUIDs infla la URL hasta que PostgREST la rechaza con "400 Bad Request" (nos pasó en
-  // producción con 691 contactos / 1097 conversaciones). RLS ya scopea por empresa, así
-  // que basta un select plano.
-  const { data: contacts, error: contactsError } = await supabase.from("contacts").select("id, display_name, wa_id");
-  if (contactsError) throw contactsError;
-  const contactById = new Map((contacts ?? []).map((c) => [c.id, c]));
+  // Antes se traían TODOS los contactos de la empresa sin filtro, pero PostgREST corta en
+  // 1000 filas: con 12 mil contactos, la mayoría de conversaciones salía sin nombre ni
+  // número. Ahora solo los contactos de estas conversaciones, en lotes chicos.
+  const contactIds = [...new Set(conversations.map((c) => c.contact_id))];
+  const contactPages = await Promise.all(
+    chunk(contactIds, IN_CHUNK_SIZE).map((ids) => supabase.from("contacts").select("id, display_name, wa_id").in("id", ids)),
+  );
+  const contactById = new Map<string, { id: string; display_name: string | null; wa_id: string }>();
+  for (const { data, error: contactsError } of contactPages) {
+    if (contactsError) throw contactsError;
+    for (const c of data ?? []) contactById.set(c.id, c);
+  }
 
   const { data: phoneNumbers, error: phoneNumbersError } = await supabase
     .from("phone_numbers")
@@ -74,18 +108,25 @@ export async function listConversations(): Promise<ConversationListItem[]> {
   if (phoneNumbersError) throw phoneNumbersError;
   const phoneNumberById = new Map((phoneNumbers ?? []).map((p) => [p.id, p]));
 
-  // Vista `conversation_last_message` (DISTINCT ON en Postgres, ver migración
-  // 20260918173000): el mismo problema de URL gigante aplicaba aquí, y peor — traía TODOS
-  // los mensajes de la empresa a Node solo para quedarse con el más reciente de cada uno.
-  const { data: recentMessages, error: messagesError } = await supabase
-    .from("conversation_last_message")
-    .select("conversation_id, message_type, content");
-  if (messagesError) throw messagesError;
-  const lastMessageByConversation = new Map(
-    (recentMessages ?? [])
-      .filter((m) => m.conversation_id !== null && m.message_type !== null)
-      .map((m) => [m.conversation_id as string, { message_type: m.message_type as string, content: m.content }]),
+  // Vista `conversation_last_message` (LATERAL ... LIMIT 1 por conversación, migración
+  // 20261104230000), filtrada por lotes a las conversaciones listadas: sin filtro también
+  // se cortaba en 1000 filas y el resto quedaba sin vista previa.
+  const messagePages = await Promise.all(
+    chunk(
+      conversations.map((c) => c.id),
+      IN_CHUNK_SIZE,
+    ).map((ids) =>
+      supabase.from("conversation_last_message").select("conversation_id, message_type, content").in("conversation_id", ids),
+    ),
   );
+  const lastMessageByConversation = new Map<string, { message_type: string; content: unknown }>();
+  for (const { data, error: messagesError } of messagePages) {
+    if (messagesError) throw messagesError;
+    for (const m of data ?? []) {
+      if (m.conversation_id === null || m.message_type === null) continue;
+      lastMessageByConversation.set(m.conversation_id, { message_type: m.message_type, content: m.content });
+    }
+  }
 
   // Se ordena acá (no en el query) por el más reciente entre last_inbound_at y
   // last_outbound_at: una conversación cuyo único mensaje es saliente (ej. un eco de la app
