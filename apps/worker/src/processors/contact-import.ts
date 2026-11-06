@@ -9,6 +9,17 @@ type Client = SupabaseClient<Database>;
 
 const RESERVED_COLUMNS = new Set(["phone", "telefono", "wa_id", "name", "tags"]);
 
+/**
+ * Excel en configuración regional española guarda los CSV con ";" aunque se elija
+ * "delimitado por comas". Se decide por el separador más frecuente en el encabezado.
+ */
+export function detectDelimiter(csvText: string): string {
+  const header = csvText.replace(/^﻿/, "").split(/\r?\n/, 1)[0] ?? "";
+  const counts = [";", ",", "\t"].map((d) => [d, header.split(d).length - 1] as const);
+  const [best, count] = counts.reduce((a, b) => (b[1] > a[1] ? b : a));
+  return count > 0 ? best : ",";
+}
+
 async function upsertTag(supabase: Client, name: string, companyId: string): Promise<string> {
   const { data: existing } = await supabase
     .from("tags")
@@ -108,7 +119,24 @@ export async function processContactImport(supabase: Client, contactImportId: st
   }
 
   const csvText = await fileBlob.text();
-  const rows = parse(csvText, { columns: true, skip_empty_lines: true, trim: true }) as Record<string, string>[];
+  let rows: Record<string, string>[];
+  try {
+    rows = parse(csvText, {
+      bom: true,
+      delimiter: detectDelimiter(csvText),
+      // "Phone"/"TELEFONO" cuentan como columna reservada; las demás conservan su nombre (claves de campos personalizados).
+      columns: (header: string[]) =>
+        header.map((h) => (RESERVED_COLUMNS.has(h.trim().toLowerCase()) ? h.trim().toLowerCase() : h.trim())),
+      skip_empty_lines: true,
+      trim: true,
+      relax_column_count: true,
+    }) as Record<string, string>[];
+  } catch (parseError) {
+    // Sin esto la importación quedaba en "processing" para siempre y el job se reintentaba sin sentido.
+    await supabase.from("contact_imports").update({ status: "failed" }).eq("id", contactImportId);
+    console.error(`[contact-import] CSV ilegible (${contactImportId}):`, parseError);
+    return;
+  }
 
   let successCount = 0;
   let errorCount = 0;
