@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import * as z from "zod";
-import { resolveCampaignVariables } from "@reto-whatsapp/core";
+import type { Database } from "@reto-whatsapp/db";
+import { findUnknownCampaignPlaceholders, resolveCampaignVariables } from "@reto-whatsapp/core";
 import { requireRole } from "@/lib/auth/dal";
 import { friendlyDbError } from "@/lib/db-error";
 import { createClient } from "@/lib/supabase/server";
@@ -13,6 +14,20 @@ import { previewAudience, type AudienceFilter } from "@/lib/campaigns/queries";
 export interface ActionState {
   error?: string;
   success?: boolean;
+}
+
+type ServerClient = Awaited<ReturnType<typeof createClient>>;
+
+/** Mensaje de error si el mapeo trae `{{…}}` que la campaña no sabe resolver; si no, null. */
+async function validateVariableMapping(supabase: ServerClient, mapping: Record<string, string>): Promise<string | null> {
+  const { data: fields } = await supabase.from("custom_field_definitions").select("key");
+  const unknown = findUnknownCampaignPlaceholders(mapping, (fields ?? []).map((f) => f.key));
+  if (unknown.length === 0) return null;
+  return (
+    `Estas variables no existen en campañas: ${unknown.join(", ")}. ` +
+    "Usa {{contact.display_name}} para el nombre, {{contact.<campo personalizado>}} o texto fijo. " +
+    "Las variables {{hotmart.…}} solo funcionan en el complemento de Hotmart."
+  );
 }
 
 const CreateCampaignSchema = z.object({
@@ -44,6 +59,9 @@ export async function createCampaign(_prev: ActionState | undefined, formData: F
   }
 
   const supabase = await createClient();
+  const variableError = await validateVariableMapping(supabase, variableMapping);
+  if (variableError) return { error: variableError };
+
   const { data: campaign, error } = await supabase
     .from("campaigns")
     .insert({
@@ -89,6 +107,12 @@ export async function lockRecipients(campaignId: string): Promise<ActionState> {
     .single();
   if (error || !campaign) return { error: "Campaña no encontrada." };
   if (campaign.status !== "draft") return { error: "La campaña ya no está en borrador." };
+
+  const variableError = await validateVariableMapping(
+    supabase,
+    campaign.variable_mapping as unknown as Record<string, string>,
+  );
+  if (variableError) return { error: variableError };
 
   const rawFilter = campaign.audience_filter as Partial<AudienceFilter>;
   const filter: AudienceFilter = {
@@ -138,4 +162,49 @@ export async function startCampaign(campaignId: string): Promise<ActionState> {
 
   revalidatePath(`/campaigns/${campaignId}`);
   return { success: true };
+}
+
+/**
+ * Cambia el estado de una campaña en curso. El worker lo respeta en cada envío:
+ * en pausa los mensajes esperan y se reintentan solos; al cancelar, los que no
+ * habían salido quedan como omitidos.
+ */
+async function transitionCampaign(
+  campaignId: string,
+  from: string[],
+  to: "paused" | "running" | "cancelled",
+  invalidMessage: string,
+): Promise<ActionState> {
+  await requireRole("admin", "supervisor");
+  const supabase = await createClient();
+
+  const { data: updated, error } = await supabase
+    .from("campaigns")
+    .update(to === "cancelled" ? { status: to, completed_at: new Date().toISOString() } : { status: to })
+    .eq("id", campaignId)
+    .in("status", from as Database["public"]["Enums"]["campaign_status"][])
+    .select("id");
+  if (error) return { error: friendlyDbError(error) };
+  if (!updated || updated.length === 0) return { error: invalidMessage };
+
+  revalidatePath(`/campaigns/${campaignId}`);
+  revalidatePath("/campaigns");
+  return { success: true };
+}
+
+export async function pauseCampaign(campaignId: string): Promise<ActionState> {
+  return transitionCampaign(campaignId, ["queued", "running"], "paused", "Solo se puede pausar una campaña en curso.");
+}
+
+export async function resumeCampaign(campaignId: string): Promise<ActionState> {
+  return transitionCampaign(campaignId, ["paused"], "running", "La campaña no está en pausa.");
+}
+
+export async function cancelCampaign(campaignId: string): Promise<ActionState> {
+  return transitionCampaign(
+    campaignId,
+    ["recipients_locked", "queued", "running", "paused"],
+    "cancelled",
+    "Esta campaña ya terminó o fue cancelada.",
+  );
 }

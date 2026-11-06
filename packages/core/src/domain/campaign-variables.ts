@@ -27,3 +27,25 @@ export function resolveCampaignVariables(
   }
   return resolved;
 }
+
+const ANY_PLACEHOLDER_RE = /\{\{\s*([^{}]*?)\s*\}\}/g;
+
+/**
+ * Devuelve los `{{…}}` del mapeo que la campaña no sabría resolver. Sin esta
+ * validación se enviaban literales como `{{hotmart.buyer_first_name}}` (esas
+ * variables solo existen en el complemento de Hotmart, no en campañas).
+ */
+export function findUnknownCampaignPlaceholders(
+  mapping: Record<string, string>,
+  knownCustomFieldKeys: Iterable<string>,
+): string[] {
+  const known = new Set(["display_name", "wa_id", ...knownCustomFieldKeys]);
+  const unknown = new Set<string>();
+  for (const template of Object.values(mapping)) {
+    for (const [raw, inner] of template.matchAll(ANY_PLACEHOLDER_RE)) {
+      const field = /^contact\.(\w+)$/.exec(inner ?? "")?.[1];
+      if (!field || !known.has(field)) unknown.add(raw);
+    }
+  }
+  return [...unknown];
+}

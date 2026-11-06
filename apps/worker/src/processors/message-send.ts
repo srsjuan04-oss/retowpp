@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { Worker, type Job, type ConnectionOptions } from "bullmq";
+import { DelayedError, Worker, type Job, type ConnectionOptions } from "bullmq";
 import {
   MESSAGE_SEND_QUEUE,
   WhatsAppApiError,
@@ -34,10 +34,12 @@ async function maybeCompleteCampaign(supabase: Client, campaignId: string): Prom
   if (error) throw error;
 
   if (count === 0) {
+    // No pisar una campaña cancelada o pausada por el usuario.
     await supabase
       .from("campaigns")
       .update({ status: "completed", completed_at: new Date().toISOString() })
-      .eq("id", campaignId);
+      .eq("id", campaignId)
+      .in("status", ["queued", "running"]);
   }
 }
 
@@ -48,6 +50,11 @@ async function maybeCompleteCampaign(supabase: Client, campaignId: string): Prom
  * destinatario: el jobId determinístico + el unique (campaign_id, contact_id)
  * de campaign_recipients son la doble capa de idempotencia.
  */
+/** Cuánto espera un envío de una campaña en pausa antes de volver a comprobar. */
+const PAUSED_RECHECK_MS = 30_000;
+
+export class CampaignPausedError extends Error {}
+
 export async function processMessageSend(supabase: Client, campaignId: string, contactId: string): Promise<void> {
   const { data: recipient, error } = await supabase
     .from("campaign_recipients")
@@ -60,10 +67,16 @@ export async function processMessageSend(supabase: Client, campaignId: string, c
 
   const { data: campaign, error: campaignError } = await supabase
     .from("campaigns")
-    .select("template_id, phone_number_id, company_id")
+    .select("template_id, phone_number_id, company_id, status")
     .eq("id", campaignId)
     .single();
   if (campaignError) throw campaignError;
+
+  if (campaign.status === "cancelled") {
+    await markRecipient(supabase, recipient.id, "skipped", "Campaña cancelada antes del envío.");
+    return;
+  }
+  if (campaign.status === "paused") throw new CampaignPausedError();
 
   const { data: contact, error: contactError } = await supabase
     .from("contacts")
@@ -154,8 +167,15 @@ export function createMessageSendWorker(connection: ConnectionOptions): Worker {
 
   const worker = new Worker(
     MESSAGE_SEND_QUEUE,
-    async (job: Job<{ campaignId: string; contactId: string }>) => {
-      await processMessageSend(supabase, job.data.campaignId, job.data.contactId);
+    async (job: Job<{ campaignId: string; contactId: string }>, token?: string) => {
+      try {
+        await processMessageSend(supabase, job.data.campaignId, job.data.contactId);
+      } catch (err) {
+        if (!(err instanceof CampaignPausedError)) throw err;
+        // En pausa: el job vuelve a la cola diferido, sin gastar intentos.
+        await job.moveToDelayed(Date.now() + PAUSED_RECHECK_MS, token);
+        throw new DelayedError();
+      }
     },
     // Límite conservador por defecto para no exceder el throughput de Meta;
     // ajustable según el messaging tier real de cada número.

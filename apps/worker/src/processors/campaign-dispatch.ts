@@ -32,6 +32,15 @@ export async function processCampaignDispatch(supabase: Client, campaignId: stri
 
   let batchIndex = 0;
   for (;;) {
+    const { data: current } = await supabase.from("campaigns").select("status").eq("id", campaignId).single();
+    if (current?.status === "cancelled") {
+      await supabase
+        .from("campaign_recipients")
+        .update({ status: "skipped", skip_reason: "Campaña cancelada antes del envío." })
+        .eq("campaign_id", campaignId)
+        .eq("status", "pending");
+      return;
+    }
     const { data: pending, error: pendingError } = await supabase
       .from("campaign_recipients")
       .select("id, contact_id")

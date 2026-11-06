@@ -86,6 +86,12 @@ export default async function CampaignDetailPage({
         </section>
       )}
 
+      {(campaign.status === "queued" || campaign.status === "running" || campaign.status === "paused") && (
+        <section className="rounded-lg border p-4">
+          <CampaignActions campaignId={campaignId} status={campaign.status} />
+        </section>
+      )}
+
       {campaign.status !== "draft" && (
         <section className="grid grid-cols-4 gap-3 sm:grid-cols-7">
           {(
