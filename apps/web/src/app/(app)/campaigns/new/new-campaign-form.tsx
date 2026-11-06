@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import type { TemplateOption } from "@/lib/templates/queries";
 import type { PhoneNumberOption } from "@/lib/campaigns/queries";
 import type { TagItem } from "@/lib/contacts/queries";
+import { VariablePicker, type VariableFieldOption } from "./variable-picker";
 
 const initialState: ActionState = {};
 
@@ -16,10 +17,12 @@ export function NewCampaignForm({
   templates,
   phoneNumbers,
   tags,
+  customFields,
 }: {
   templates: TemplateOption[];
   phoneNumbers: PhoneNumberOption[];
   tags: TagItem[];
+  customFields: VariableFieldOption[];
 }) {
   const [state, formAction, pending] = useActionState(createCampaign, initialState);
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
@@ -97,13 +100,12 @@ export function NewCampaignForm({
       </div>
 
       {variableIndexes.length > 0 && (
-        <div className="flex flex-col gap-2 rounded-md border p-3">
+        <div key={templateId} className="flex flex-col gap-3 rounded-md border p-3">
           <p className="text-xs text-muted-foreground">
-            Variables de la plantilla. Puedes usar <code>{"{{contact.display_name}}"}</code> o el nombre de un campo
-            personalizado como <code>{"{{contact.mi_campo}}"}</code> para personalizar por destinatario.
+            Variables de la plantilla: elige qué dato del contacto va en cada una, o escribe un texto fijo.
           </p>
           {variableIndexes.map((i) => (
-            <Input key={i} name={`var_${i}`} placeholder={`Variable {{${i}}}`} />
+            <VariablePicker key={i} index={i} customFields={customFields} />
           ))}
         </div>
       )}
